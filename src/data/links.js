@@ -1,8 +1,8 @@
 // Central place for all external URLs used across the site.
 export const LINKS = {
-  docs:         "https://mtconnect.org/documentation",
-  quickstart:   "https://mtconnect.org/documentation",
-  apiRef:       "https://mtconnect.org/documentation",
+  docs:         "https://mtconnect.mintlify.app/",
+  quickstart:   "https://mtconnect.mintlify.app/",
+  apiRef:       "https://mtconnect.mintlify.app/",
   github:       "https://github.com/mtconnect",
   cppAgent:     "https://github.com/mtconnect/cppagent",
   slack:        "https://mtconnect.slack.com",

@@ -23,9 +23,9 @@ const Navbar = () => (
     </div>
 
     {/* CTA */}
-    <Button href={LINKS.docs} target="_blank" rel="noopener noreferrer" variant="primary">
-      Get started
-    </Button>
+<Button href="mailto:info@mtconnect.org" variant="primary">
+  Contact Us
+</Button>
   </nav>
 );
 
