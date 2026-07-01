@@ -15,15 +15,23 @@ const ToolCard = ({ badge, title, body, link, href, soon }) => {
                   hover:-translate-y-0.5 hover:shadow-xl hover:border-brand
                   ${soon ? "border-dashed border-slate-200" : "border-slate-200"}`}
     >
-      <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded self-start mb-3.5
-                        ${soon
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-brand-light text-brand-dark"}`}>
+      <span
+        className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded self-start mb-3.5
+                        ${
+                          soon
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-brand-light text-brand-dark"
+                        }`}
+      >
         {badge}
       </span>
       <p className="text-[14px] font-medium text-slate-900 mb-2">{title}</p>
-      <p className="text-[12.5px] text-slate-500 leading-[1.6] flex-1">{body}</p>
-      <p className={`text-[12px] font-medium mt-4 ${soon ? "text-slate-400" : "text-brand"}`}>
+      <p className="text-[12.5px] text-slate-500 leading-[1.6] flex-1">
+        {body}
+      </p>
+      <p
+        className={`text-[12px] font-medium mt-4 ${soon ? "text-slate-400" : "text-brand"}`}
+      >
         {link}
       </p>
     </Tag>
