@@ -1,0 +1,2241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build Your Own Device · MTConnect Playground</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel-2: #182032;
+    --border: #1f2a44;
+    --text: #e6edf7;
+    --muted: #8a97b1;
+    --accent: #ff8a3d;       /* MTConnect-ish warm */
+    --accent-2: #5ad1ff;     /* cool data accent */
+    --good: #4ade80;
+    --warn: #facc15;
+    --bad:  #f87171;
+    --mono: ui-monospace, "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { display: flex; flex-direction: column; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #0e1422 0%, var(--bg) 100%);
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: 0.2px; }
+  header h1 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 8px; box-shadow: 0 0 12px var(--accent); vertical-align: middle; }
+  header .hint { color: var(--muted); font-size: 12px; }
+  header .right { display: flex; gap: 8px; align-items: center; }
+  header button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    padding: 6px 10px; font-size: 12px; border-radius: 6px; cursor: pointer; font-family: var(--sans);
+  }
+  header button:hover { border-color: var(--accent); color: var(--accent); }
+
+  main {
+    flex: 1; display: grid; grid-template-columns: 260px 1fr 460px; min-height: 0;
+  }
+  .pane { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .pane + .pane { border-left: 1px solid var(--border); }
+  .pane h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    margin: 0; padding: 12px 14px 6px; font-weight: 600;
+  }
+
+  /* LEFT: palette */
+  .palette { background: var(--panel); overflow-y: auto; }
+  .palette-group { padding: 4px 10px 10px; }
+  .palette-group .group-title { font-size: 11px; color: var(--muted); padding: 6px 4px; }
+  .chip {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer; user-select: none;
+    background: var(--panel-2); margin-bottom: 6px; transition: transform .08s, border-color .15s;
+  }
+  .chip:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .chip[disabled] { opacity: .4; pointer-events: none; }
+  .chip svg { flex-shrink: 0; }
+  .chip .label { font-size: 13px; font-weight: 500; }
+  .chip .sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .chip-text { display: flex; flex-direction: column; line-height: 1.25; }
+
+  /* CENTER: stage */
+  .stage { background: var(--bg); }
+  .stage-svg-wrap {
+    flex: 1.1; display: flex; align-items: center; justify-content: center;
+    border-bottom: 1px solid var(--border);
+    background:
+      radial-gradient(circle at 50% 40%, rgba(90,209,255,0.07), transparent 60%),
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,0.025) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, rgba(255,255,255,0.025) 39px 40px);
+    position: relative; overflow: hidden;
+  }
+  .stage-svg-wrap .empty-hint {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 13px; pointer-events: none; text-align: center; padding: 20px;
+  }
+  .stage-svg-wrap.has-parts .empty-hint { display: none; }
+  svg.machine { width: 96%; max-width: 700px; height: 96%; max-height: 420px; }
+
+  /* 3D view controls overlay */
+  .view-controls{position:absolute;right:14px;bottom:14px;display:flex;gap:4px;background:rgba(11,15,23,0.7);border:1px solid var(--border);border-radius:8px;padding:5px;backdrop-filter:blur(6px);z-index:2}
+  .view-controls button{background:transparent;color:var(--muted);border:none;font-size:13px;padding:5px 10px;cursor:pointer;border-radius:4px;font-family:var(--mono)}
+  .view-controls button:hover{color:var(--accent-2);background:rgba(90,209,255,0.1)}
+  .view-controls .div{width:1px;background:var(--border);margin:0 2px}
+  .body-face{filter:drop-shadow(0 6px 10px rgba(0,0,0,0.35))}
+  .iso-clickable{cursor:pointer;transition:filter .15s}
+  .iso-clickable:hover{filter:brightness(1.25)}
+
+  /* View mode tabs (2D / 3D toggle above the machine) */
+  .view-tabs{position:absolute;left:14px;top:14px;display:flex;gap:0;background:rgba(11,15,23,0.7);border:1px solid var(--border);border-radius:8px;padding:3px;backdrop-filter:blur(6px);z-index:2;font-family:var(--mono);font-size:11px}
+  .view-tabs button{background:transparent;color:var(--muted);border:none;padding:5px 12px;cursor:pointer;border-radius:5px;font-weight:600;letter-spacing:0.4px;font-family:inherit}
+  .view-tabs button.active{background:var(--accent);color:#0b0f17}
+  .view-tabs button:not(.active):hover{color:var(--text)}
+
+  /* Spin via attribute-driven rotation in 2D mode */
+  @keyframes spindleSpin2D { to { transform: rotate(360deg); } }
+  .spin2d { transform-origin: center; transform-box: fill-box; animation: spindleSpin2D 1.2s linear infinite; }
+
+  .tree {
+    flex: 0.9; overflow: auto; padding: 8px 12px 16px; background: var(--panel);
+  }
+  /* New tree format: Name[id] with indent-based hierarchy */
+  .tree .tree-line { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; padding: 1px 6px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tree .tree-line:hover { background: rgba(255,255,255,0.025); }
+  .tree .tn { color: var(--accent-2); font-weight: 500; }
+  .tree .ti { color: var(--muted); margin-left: 2px; font-size: 11.5px; }
+  .tree .tree-line.dev .tn { color: var(--accent); font-weight: 600; }            /* Device root */
+  .tree .tree-line.org .tn { color: #c0a6f0; font-weight: 500; }                   /* Axes / Systems / Auxiliaries */
+  .tree .tree-line.di  .tn { color: var(--text); font-weight: 400; }                /* DataItems */
+  .tree .tree-line.di  .ti { color: #5a6783; }
+  .tree .tree-line .remove { margin-left: 10px; color: var(--muted); font-size: 11px; cursor: pointer; opacity: 0; }
+  .tree .tree-line:hover .remove { opacity: 1; }
+  .tree .tree-line .remove:hover { color: var(--bad); }
+  /* Toggle chevron for expand/collapse */
+  .tree .tree-line .tg { display: inline-block; width: 12px; text-align: center; margin-right: 2px; color: var(--muted); font-size: 9px; cursor: pointer; user-select: none; }
+  .tree .tree-line .tg:hover { color: var(--accent); }
+  .tree .tree-line .tg.leaf { cursor: default; opacity: 0.35; }
+  /* Visual cue: hovered tree line gets a subtle accent border to tie it to the XML highlight */
+  .tree .tree-line.hover-active { background: rgba(255,138,61,0.08); box-shadow: inset 2px 0 0 var(--accent); }
+
+  /* XML pane hover highlight (driven by tree hover) */
+  .xml .xn { display: inline; }
+  .xml .xn.xml-hl { background: rgba(255,138,61,0.18); border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(255,138,61,0.4); }
+
+  /* Definition tooltip (appears on tree-line hover after ~300ms) */
+  .def-tip { position: fixed; z-index: 250; max-width: 340px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.55); pointer-events: none; opacity: 0; transition: opacity 0.12s; font-family: var(--sans); }
+  .def-tip.show { opacity: 1; }
+  .def-tip .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .def-tip .head .name { font-family: var(--mono); font-weight: 600; color: var(--accent); font-size: 12.5px; }
+  .def-tip .head .kind { font-family: var(--mono); font-size: 10.5px; color: var(--accent-2); padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+  .def-tip .body { font-size: 12px; line-height: 1.5; color: var(--text); }
+  .def-tip .sub { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+  .def-tip .sub .st { font-family: var(--mono); color: var(--accent-2); }
+  .def-tip .note { margin-top: 6px; font-size: 11px; color: var(--muted); font-style: italic; }
+
+  /* RIGHT: tabs */
+  .inspector { background: var(--panel); }
+  .tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 8px;
+  }
+  .tab {
+    padding: 10px 14px; font-size: 12px; cursor: pointer; color: var(--muted);
+    border-bottom: 2px solid transparent; user-select: none;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab .badge {
+    background: var(--accent); color: #0b0f17; font-weight: 700; border-radius: 999px;
+    font-size: 10px; padding: 1px 6px; margin-left: 6px;
+  }
+  .tab-body { flex: 1; overflow: auto; }
+  .tab-body pre {
+    margin: 0; padding: 14px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.55;
+    color: var(--text); white-space: pre-wrap; word-break: break-word;
+  }
+  .xml .tag { color: #c0a6f0; }
+  .xml .attr { color: #ffc46b; }
+  .xml .string { color: #8fd87a; }
+  .xml .comment { color: var(--muted); font-style: italic; }
+
+  /* Stream tab */
+  .stream-list { padding: 6px 10px 14px; }
+  .stream-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+    padding: 8px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12.5px;
+  }
+  .stream-row .key { color: var(--muted); }
+  .stream-row .key .kname { color: var(--text); }
+  .stream-row .key .ktype { font-size: 10.5px; color: var(--accent-2); margin-left: 6px; }
+  .stream-row .val { color: var(--text); }
+  .stream-row .val.sample { color: var(--accent); font-weight: 600; }
+  .stream-row .val.event { color: var(--good); }
+  .stream-row .val.condition.normal { color: var(--good); }
+  .stream-row .val.condition.warning { color: var(--warn); }
+  .stream-row .val.condition.fault { color: var(--bad); }
+  .empty-stream { padding: 24px; color: var(--muted); font-size: 13px; text-align: center; }
+
+  /* Code tab */
+  .code-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .code-section h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .code-section pre {
+    margin: 0; padding: 12px; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 6px; font-family: var(--mono); font-size: 12px; overflow-x: auto;
+  }
+  .code-section pre .k { color: #c0a6f0; }
+  .code-section pre .s { color: #8fd87a; }
+  .code-section pre .c { color: var(--muted); }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 6px 14px; font-size: 11px; color: var(--muted);
+    display: flex; gap: 14px; align-items: center;
+  }
+  footer .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 10px var(--good); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; transform: scale(0.9); } }
+
+  /* Spindle spin */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinning { transform-origin: center; animation: spin 1.2s linear infinite; }
+
+  /* Coolant drip */
+  @keyframes drip {
+    0% { transform: translateY(0); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translateY(60px); opacity: 0; }
+  }
+  .drip { animation: drip 1.4s linear infinite; transform-origin: center; }
+
+  /* small */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #25304a; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* Category picker modal */
+  .cat-overlay { position: fixed; inset: 0; background: rgba(8, 12, 22, 0.78); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 24px; }
+  .cat-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px 26px; width: 100%; max-width: 560px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .cat-modal h3 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .cat-modal h3 .accent { color: var(--accent); }
+  .cat-sub { font-size: 12.5px; color: var(--muted); margin: 0 0 18px; line-height: 1.55; }
+  .cat-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+  .cat-opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; transition: border-color .12s; }
+  .cat-opt:hover { border-color: var(--accent-2); }
+  .cat-opt input[type=checkbox] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+  .cat-opt-body { flex: 1; min-width: 0; }
+  .cat-opt-title { font-size: 13.5px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .cat-opt-title .count { font-size: 10.5px; color: var(--muted); font-family: var(--mono); font-weight: 400; padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px; }
+  .cat-opt-title .canon { font-size: 10.5px; color: var(--accent-2); font-family: var(--mono); font-weight: 400; }
+  .cat-opt-desc { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 6px; }
+  .cat-opt-preview { font-size: 10.5px; color: #6b7a99; font-family: var(--mono); line-height: 1.55; word-break: break-word; }
+  .cat-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+  .cat-buttons button { padding: 8px 16px; font-size: 12.5px; border-radius: 7px; border: 1px solid var(--border); cursor: pointer; font-family: var(--sans); }
+  .cat-buttons .secondary { background: var(--panel-2); color: var(--text); }
+  .cat-buttons .secondary:hover { border-color: var(--muted); }
+  .cat-buttons .primary { background: var(--accent); color: #0b0f17; border-color: var(--accent); font-weight: 600; }
+  .cat-buttons .primary:hover { filter: brightness(1.1); }
+  .cat-buttons .primary[disabled] { opacity: 0.4; cursor: not-allowed; filter: none; }
+
+  /* ---------- Touch-device hover imitation ---------- */
+  /* Touch screens have no real :hover — mobile browsers fake it on tap and then
+     leave it "stuck" until the user taps elsewhere, which looks buggy. On
+     hover-less/coarse-pointer devices we cancel the plain :hover rules and
+     replace them with :active equivalents, so pressing a finger down gives the
+     same visual feedback a mouse-hover would, and it releases cleanly on lift. */
+  @media (hover: none), (pointer: coarse) {
+    header button:hover { border-color: var(--border); color: var(--text); }
+    header button:active { border-color: var(--accent); color: var(--accent); }
+
+    .chip:hover { border-color: var(--border); transform: none; }
+    .chip:active { border-color: var(--accent); transform: translateY(-1px); }
+
+    .view-controls button:hover { color: var(--muted); background: transparent; }
+    .view-controls button:active { color: var(--accent-2); background: rgba(90,209,255,0.1); }
+
+    .iso-clickable:hover { filter: none; }
+    .iso-clickable:active { filter: brightness(1.25); }
+
+    .view-tabs button:not(.active):hover { color: var(--muted); }
+    .view-tabs button:not(.active):active { color: var(--text); }
+
+    .cat-opt:hover { border-color: var(--border); }
+    .cat-opt:active { border-color: var(--accent-2); }
+
+    .cat-buttons .secondary:hover { border-color: var(--border); }
+    .cat-buttons .secondary:active { border-color: var(--muted); }
+    .cat-buttons .primary:hover { filter: none; }
+    .cat-buttons .primary:active { filter: brightness(1.1); }
+
+    /* The tree's hover-driven highlight/tooltip is reimplemented as a tap
+       toggle in JS (see IS_TOUCH branch in rerenderTree). Neutralize the
+       native :hover here so it can't get stuck, and keep the [remove] link
+       faintly visible at all times since it can never be "hovered" into
+       view on a touch device. */
+    .tree .tree-line:hover { background: transparent; }
+    .tree .tree-line .remove { opacity: 0.55; }
+    .tree .tree-line:hover .remove { opacity: 0.55; }
+    .tree .tree-line.hover-active .remove { opacity: 1; }
+    .tree .tree-line .tg:hover { color: var(--muted); }
+  }
+
+  /* ---------- Small-viewport (mobile) layout ---------- */
+  .mobile-tabs { display: none; }
+  @media (max-width: 880px) {
+    header { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+    header h1 { font-size: 13px; width: 100%; }
+    header h1 .subtitle { display: none; }            /* drop the long subtitle on small screens */
+    header .hint { display: none; }                  /* redundant with the mobile tab bar below */
+    header .right { width: 100%; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+    header .right button { flex-shrink: 0; }
+
+    /* Three panes become three full-width screens, switched by the tab bar
+       below, instead of three simultaneous grid columns (which is what made
+       this unusable on a phone-width viewport). */
+    main { display: flex; flex-direction: column; min-height: 0; }
+    .mobile-tabs {
+      display: flex; flex-shrink: 0; position: sticky; top: 0; z-index: 5;
+      background: var(--panel); border-bottom: 1px solid var(--border);
+    }
+    .mobile-tabs button {
+      flex: 1; background: transparent; border: none; color: var(--muted);
+      font-size: 12px; font-weight: 600; padding: 11px 4px; font-family: var(--sans);
+      border-bottom: 2px solid transparent; cursor: pointer;
+    }
+    .mobile-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+    .pane { display: none; width: 100%; }
+    .pane.mobile-active { display: flex; flex: 1; min-height: 0; }
+    .pane + .pane { border-left: none; }
+
+    /* Give the machine view a sane minimum instead of splitting the screen
+       50/50 with the (often taller) hierarchy tree underneath it. */
+    .stage-svg-wrap { flex: 1.3; }
+    .tree { flex: 1; }
+    svg.machine { max-height: 320px; }
+
+    /* Inspector's own top-of-pane tabs (Devices.xml / Live Stream / Try It)
+       already work as tap targets; just let them wrap instead of clipping. */
+    .tabs { flex-wrap: wrap; }
+
+    /* Category picker modal padding gets tight on narrow screens */
+    .cat-modal { padding: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot"></span>Build Your Own Device <span class="subtitle" style="color:var(--muted);font-weight:400;margin-left:6px">· MTConnect Playground · live data from <code style="color:var(--accent-2);font-family:var(--mono);font-size:11px">demo.mtconnect.org</code></span></h1>
+  <div class="hint" id="connHint">Click components on the left. Press <strong style="color:var(--accent)">Play</strong> to stream real telemetry.</div>
+  <div class="right">
+    <button id="btn-load-starter" title="Just X, Y, Z — the smallest thing that streams real data">Just X·Y·Z</button>
+    <button id="btn-load-full" title="The full component set the backend CNC mill exposes">Full Mill</button>
+    <button id="btn-reset">Reset</button>
+    <span style="width:1px;background:var(--border);align-self:stretch;margin:0 4px"></span>
+    <button id="btn-play" style="background:var(--good);color:#0b0f17;border-color:var(--good);font-weight:600">▶ Play</button>
+    <button id="btn-stop" style="display:none;background:var(--panel-2);color:var(--text);border-color:var(--bad);font-weight:600" title="Stop the live stream — no files are downloaded">■ Stop</button>
+    <button id="btn-stop-export" style="display:none;background:var(--bad);color:#0b0f17;border-color:var(--bad);font-weight:600" title="Stop the live stream and download Devices.xml + SHDR transcript">■ Stop &amp; Export</button>
+  </div>
+</header>
+
+<main>
+  <div class="mobile-tabs" id="mobileTabs">
+    <button data-pane="palette" class="active">Components</button>
+    <button data-pane="stage">Machine</button>
+    <button data-pane="inspector">Inspector</button>
+  </div>
+  <!-- LEFT: palette -->
+  <section class="pane palette">
+    <h2>Components</h2>
+    <div class="palette-disclaimer" style="margin:0 10px 10px;padding:8px 10px;background:rgba(90,209,255,0.08);border:1px solid rgba(90,209,255,0.3);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.45">
+      <strong style="color:var(--accent-2)">Curated superset.</strong> Every piece below is something the real 5-axis CNC mill on <code style="font-family:var(--mono);color:var(--accent-2)">demo.mtconnect.org</code> exposes. Drop pieces one at a time and press <strong style="color:var(--accent)">Play</strong> to see live values stream from the actual machine. Tree fullness ≈ how close you are to a full industrial CNC mill.
+    </div>
+
+    <div class="palette-group">
+      <div class="group-title" style="color:var(--accent)">Step 1 · Create the Device (required)</div>
+      <div class="chip chip-device" data-add="device" style="border-color:var(--accent);background:linear-gradient(180deg,rgba(255,138,61,0.12),var(--panel-2))">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h.01M12 14h.01M16 14h.01"/></svg>
+        <div class="chip-text"><span class="label">Device</span><span class="sub">AVAILABILITY · ASSET_CHANGED · ASSET_REMOVED</span></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-title">Axes</div>
+      <div class="chip" data-add="linear-x">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M18 9l3 3-3 3M6 9L3 12l3 3"/></svg>
+        <div class="chip-text"><span class="label">Linear X</span><span class="sub">POSITION · LOAD · AXIS_FEEDRATE · TEMPERATURE</span></div>
+      </div>
+      <div class="chip" data-add="linear-y">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M9 18l3 3 3-3M9 6l3-3 3 3"/></svg>
+        <div class="chip-text"><span class="label">Linear Y</span><span class="sub">POSITION · LOAD · AXIS_FEEDRATE · TEMPERATURE</span></div>
+      </div>
+      <div class="chip" data-add="linear-z">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M9 6h9v9"/></svg>
+        <div class="chip-text"><span class="label">Linear Z</span><span class="sub">POSITION · LOAD · AXIS_FEEDRATE · TEMPERATURE</span></div>
+      </div>
+      <div class="chip" data-add="rotary-b">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4a8 8 0 0 1 0 16"/><circle cx="8" cy="4" r="1.5" fill="currentColor"/><circle cx="8" cy="20" r="1.5" fill="currentColor"/></svg>
+        <div class="chip-text"><span class="label">Rotary B (trunnion)</span><span class="sub">ANGLE · LOAD · TEMPERATURE</span></div>
+      </div>
+      <div class="chip" data-add="rotary-c1">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><path d="M12 5v3"/></svg>
+        <div class="chip-text"><span class="label">Rotary C1 (table)</span><span class="sub">ANGLE · LOAD</span></div>
+      </div>
+      <div class="chip" data-add="rotary-c2">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><path d="M12 5v3M16 9l-2 2"/></svg>
+        <div class="chip-text"><span class="label">Spindle (Rotary C2)</span><span class="sub">ROTARY_VELOCITY · LOAD · TEMPERATURE · ROTARY_MODE</span></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-title">Controller</div>
+      <div class="chip" data-add="controller">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 20h10M12 18v2"/></svg>
+        <div class="chip-text"><span class="label">Controller + Path</span><span class="sub">EXECUTION · PROGRAM · TOOL_NUMBER · PATH_FEEDRATE · PART_COUNT · EMERGENCY_STOP · 30+ more</span></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-title">Systems</div>
+      <div class="chip" data-add="coolant">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z"/></svg>
+        <div class="chip-text"><span class="label">Coolant</span><span class="sub">PRESSURE · LEVEL · TEMPERATURE</span></div>
+      </div>
+      <div class="chip" data-add="electric">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
+        <div class="chip-text"><span class="label">Electric</span><span class="sub">VOLTAGE · CONDITION</span></div>
+      </div>
+      <div class="chip" data-add="hydraulic">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 9h6M9 13h6M9 17h6"/></svg>
+        <div class="chip-text"><span class="label">Hydraulic</span><span class="sub">PRESSURE</span></div>
+      </div>
+      <div class="chip" data-add="pneumatic">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="14" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        <div class="chip-text"><span class="label">Pneumatic</span><span class="sub">PRESSURE</span></div>
+      </div>
+      <div class="chip" data-add="lubrication">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="14" r="6"/><path d="M12 4v4"/></svg>
+        <div class="chip-text"><span class="label">Lubrication</span><span class="sub">PRESSURE · LEVEL</span></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-title">Auxiliaries</div>
+      <div class="chip" data-add="door">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="1"/><circle cx="15" cy="12" r="0.8" fill="currentColor"/></svg>
+        <div class="chip-text"><span class="label">Door</span><span class="sub">DOOR_STATE</span></div>
+      </div>
+      <div class="chip" data-add="environmental">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4c-4 6-6 9-6 12a6 6 0 0 0 12 0c0-3-2-6-6-12z"/></svg>
+        <div class="chip-text"><span class="label">Environmental (room)</span><span class="sub">TEMPERATURE</span></div>
+      </div>
+      <div class="chip" data-add="enclosure">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 9h18"/></svg>
+        <div class="chip-text"><span class="label">Enclosure</span><span class="sub">DOOR_STATE</span></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-title">Parts &amp; Resources</div>
+      <div class="chip" data-add="parts">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>
+        <div class="chip-text"><span class="label">Parts / PartOccurrence</span><span class="sub">PART_COUNT · PART_KIND_ID</span></div>
+      </div>
+      <div class="chip" data-add="resources">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3 21v-1a6 6 0 0 1 12 0v1"/><circle cx="17" cy="11" r="2"/></svg>
+        <div class="chip-text"><span class="label">Resources (Personnel + Materials)</span><span class="sub">USER · MATERIAL_FEED</span></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div class="group-title">Extra Device-level DataItems</div>
+      <div class="chip" data-add="device-equipment-mode">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h4l3-8 3 16 3-8h3"/></svg>
+        <div class="chip-text"><span class="label">EQUIPMENT_MODE (×5)</span><span class="sub">LOADED · WORKING · OPERATING · POWERED · DELAY</span></div>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <div style="margin:8px 4px 0;padding:8px 10px;background:var(--bg);border:1px dashed var(--border);border-radius:6px;font-size:10.5px;color:var(--muted);line-height:1.5">
+        <strong style="color:var(--accent-2)">Tree fullness:</strong> <span id="treeFullness" style="color:var(--accent);font-family:var(--mono)">0 / 16</span> · 100% = same component set as the real CNC mill on the agent.
+      </div>
+    </div>
+  </section>
+
+  <!-- CENTER: stage + tree -->
+  <section class="pane stage">
+    <h2>Machine</h2>
+    <div class="stage-svg-wrap" id="stageWrap">
+      <div class="empty-hint">Click a component on the left to start building.<br/>Try a preset above for a quick start.</div>
+      <svg id="machineSvg" class="machine" viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="view-tabs">
+        <button data-mode="2d" class="active">2D</button>
+        <button data-mode="3d" title="3D isometric view. Live X/Y/Z/B/C positions from the agent drive the geometry. Solid-model assets currently unavailable upstream; we render procedural geometry that follows the same axis mapping.">3D</button>
+      </div>
+      <div class="view-controls" id="viewControls">
+        <button id="rotL" title="Rotate left">↺</button>
+        <button id="rotR" title="Rotate right">↻</button>
+        <div class="div"></div>
+        <button id="zoomI" title="Zoom in">+</button>
+        <button id="zoomO" title="Zoom out">−</button>
+        <div class="div"></div>
+        <button id="resetView" title="Reset view">⌂</button>
+      </div>
+    </div>
+    <div class="tree">
+      <h2 style="margin:0 0 4px;padding:0">Hierarchy</h2>
+      <div id="tree"></div>
+    </div>
+  </section>
+
+  <!-- RIGHT: inspector -->
+  <section class="pane inspector">
+    <h2>Inspector</h2>
+    <div class="tabs">
+      <div class="tab active" data-tab="xml">Devices.xml</div>
+      <div class="tab" data-tab="stream">Live Stream <span id="streamBadge" class="badge" style="display:none">0</span></div>
+      <div class="tab" data-tab="code">Try It</div>
+    </div>
+    <div class="tab-body">
+      <pre id="xmlPane" class="xml"></pre>
+      <div id="streamPane" style="display:none">
+        <div id="streamList" class="stream-list"></div>
+      </div>
+      <div id="codePane" style="display:none"></div>
+    </div>
+  </section>
+</main>
+
+<!-- Category picker modal (shown when a component spans multiple DataItem categories) -->
+<div id="catDialog" class="cat-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="cat-modal">
+    <h3 id="catTitle">What kind of data do you want from <span class="accent" id="catCompName">this component</span>?</h3>
+    <p class="cat-sub" id="catSub">MTConnect groups DataItems into three categories. Pick the kinds that matter to you — only those will appear in the device file and the live stream.</p>
+    <div id="catOptions" class="cat-options"></div>
+    <div class="cat-buttons">
+      <button id="catCancel" class="secondary">Cancel</button>
+      <button id="catRemove" class="secondary" style="display:none;color:var(--bad);border-color:rgba(248,113,113,0.5)">Remove component</button>
+      <button id="catConfirm" class="primary">Add to device</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hover tooltip for hierarchy nodes -->
+<div id="defTip" class="def-tip">
+  <div class="head"><span class="name" id="defTipName">?</span><span class="kind" id="defTipKind">?</span></div>
+  <div class="body" id="defTipBody">?</div>
+  <div class="sub" id="defTipSub" style="display:none"></div>
+  <div class="note" id="defTipNote" style="display:none"></div>
+</div>
+
+<footer>
+  <span class="pulse" id="connPulse" style="background:var(--muted);box-shadow:none"></span>
+  <span id="connStatus">Idle — press Play to connect to <code>demo.mtconnect.org</code></span>
+  <span id="seqLabel" style="color:var(--muted);font-family:var(--mono);font-size:10.5px;margin-left:16px"></span>
+  <span style="margin-left:auto;color:var(--muted)">Backend: live CNC mill on <code>demo.mtconnect.org</code> · device file + SHDR exported on Stop</span>
+</footer>
+
+<script>
+/* ---------------------------------------------------------------
+   Build Your Own Machine — single-file MTConnect playground demo
+   --------------------------------------------------------------- */
+
+/* ─────────────────────────────────────────────────────────────
+   COMPONENTS — keyed bag of buildable pieces.
+   Every entry mirrors a real component on the Mazak 5-axis on
+   demo.mtconnect.org. Each DataItem carries `mazakId` — the actual
+   id used by the live agent — so Play can route real telemetry
+   straight into this piece's stream rows.
+   Probe: https://demo.mtconnect.org/probe?device=Mazak
+   ───────────────────────────────────────────────────────────── */
+const COMPONENTS = {
+  /* ───── Linear axes (Mazak: X, Y, Z) ───── */
+  'linear-x': {
+    kind: 'Linear', name: 'X', id: 'x', parentKind: 'Axes',
+    dataItems: [
+      { type: 'POSITION',      category: 'SAMPLE', subType: 'ACTUAL', units: 'MILLIMETER',        id: 'Xabs',       mazakId: 'Xabs' },
+      { type: 'POSITION',      category: 'SAMPLE', subType: 'ACTUAL', units: 'MILLIMETER',        id: 'Xpos',       mazakId: 'Xpos' },
+      { type: 'LOAD',          category: 'SAMPLE',                    units: 'PERCENT',           id: 'Xload',      mazakId: 'Xload' },
+      { type: 'AXIS_FEEDRATE', category: 'SAMPLE',                    units: 'MILLIMETER/SECOND', id: 'Xfrt',       mazakId: 'Xfrt' },
+      { type: 'TEMPERATURE',   category: 'SAMPLE',                    units: 'CELSIUS',           id: 'servotemp1', mazakId: 'servotemp1' },
+      { type: 'AXIS_STATE',    category: 'EVENT',                                                 id: 'xaxisstate', mazakId: 'xaxisstate' },
+      { type: 'POSITION',      category: 'CONDITION',                                             id: 'Xtravel',    mazakId: 'Xtravel' }
+    ]
+  },
+  'linear-y': {
+    kind: 'Linear', name: 'Y', id: 'y', parentKind: 'Axes',
+    dataItems: [
+      { type: 'POSITION',      category: 'SAMPLE', subType: 'ACTUAL', units: 'MILLIMETER',        id: 'Yabs',       mazakId: 'Yabs' },
+      { type: 'POSITION',      category: 'SAMPLE', subType: 'ACTUAL', units: 'MILLIMETER',        id: 'Ypos',       mazakId: 'Ypos' },
+      { type: 'LOAD',          category: 'SAMPLE',                    units: 'PERCENT',           id: 'Yload',      mazakId: 'Yload' },
+      { type: 'AXIS_FEEDRATE', category: 'SAMPLE',                    units: 'MILLIMETER/SECOND', id: 'Yfrt',       mazakId: 'Yfrt' },
+      { type: 'TEMPERATURE',   category: 'SAMPLE',                    units: 'CELSIUS',           id: 'servotemp2', mazakId: 'servotemp2' },
+      { type: 'AXIS_STATE',    category: 'EVENT',                                                 id: 'yaxisstate', mazakId: 'yaxisstate' },
+      { type: 'POSITION',      category: 'CONDITION',                                             id: 'Ytravel',    mazakId: 'Ytravel' }
+    ]
+  },
+  'linear-z': {
+    kind: 'Linear', name: 'Z', id: 'z', parentKind: 'Axes',
+    dataItems: [
+      { type: 'POSITION',      category: 'SAMPLE', subType: 'ACTUAL', units: 'MILLIMETER',        id: 'Zabs',       mazakId: 'Zabs' },
+      { type: 'POSITION',      category: 'SAMPLE', subType: 'ACTUAL', units: 'MILLIMETER',        id: 'Zpos',       mazakId: 'Zpos' },
+      { type: 'LOAD',          category: 'SAMPLE',                    units: 'PERCENT',           id: 'Zload',      mazakId: 'Zload' },
+      { type: 'AXIS_FEEDRATE', category: 'SAMPLE',                    units: 'MILLIMETER/SECOND', id: 'Zfrt',       mazakId: 'Zfrt' },
+      { type: 'TEMPERATURE',   category: 'SAMPLE',                    units: 'CELSIUS',           id: 'servotemp3', mazakId: 'servotemp3' },
+      { type: 'AXIS_STATE',    category: 'EVENT',                                                 id: 'zaxisstate', mazakId: 'zaxisstate' },
+      { type: 'POSITION',      category: 'CONDITION',                                             id: 'Ztravel',    mazakId: 'Ztravel' }
+    ]
+  },
+
+  /* ───── Rotary axes (Mazak: B trunnion, C1 table, C2 spindle) ───── */
+  'rotary-b': {
+    kind: 'Rotary', name: 'B', id: 'br', parentKind: 'Axes',
+    dataItems: [
+      { type: 'ANGLE',       category: 'SAMPLE', subType: 'ACTUAL', units: 'DEGREE',  id: 'Babs',  mazakId: 'Babs' },
+      { type: 'ANGLE',       category: 'SAMPLE', subType: 'ACTUAL', units: 'DEGREE',  id: 'Bpos',  mazakId: 'Bpos' },
+      { type: 'LOAD',        category: 'SAMPLE',                    units: 'PERCENT', id: 'Bload', mazakId: 'Bload' },
+      { type: 'TEMPERATURE', category: 'SAMPLE',                    units: 'CELSIUS', id: 'Btemp', mazakId: 'Btemp' },
+      { type: 'AXIS_STATE',  category: 'EVENT',                                       id: 'baxisstate', mazakId: 'baxisstate' }
+    ]
+  },
+  'rotary-c1': {
+    kind: 'Rotary', name: 'C1', id: 'c', parentKind: 'Axes',
+    dataItems: [
+      { type: 'ANGLE',       category: 'SAMPLE', subType: 'ACTUAL', units: 'DEGREE', id: 'Cabs',     mazakId: 'Cabs' },
+      { type: 'ANGLE',       category: 'SAMPLE', subType: 'ACTUAL', units: 'DEGREE', id: 'Cpos',     mazakId: 'Cpos' },
+      { type: 'ROTARY_MODE', category: 'EVENT',                                       id: 'crfunc',   mazakId: 'crfunc' }
+    ]
+  },
+  'rotary-c2': {
+    kind: 'Rotary', name: 'C2', id: 'c2', parentKind: 'Axes',
+    dataItems: [
+      { type: 'ROTARY_VELOCITY', category: 'SAMPLE', subType: 'ACTUAL', units: 'REVOLUTION/MINUTE', id: 'Srpm',  mazakId: 'Srpm' },
+      { type: 'LOAD',            category: 'SAMPLE',                    units: 'PERCENT',           id: 'Sload', mazakId: 'Sload' },
+      { type: 'TEMPERATURE',     category: 'SAMPLE',                    units: 'CELSIUS',           id: 'Stemp', mazakId: 'Stemp' },
+      { type: 'ROTARY_MODE',     category: 'EVENT',                                                 id: 'rotary_mode', mazakId: 'rotary_mode' },
+      { type: 'LOAD',            category: 'CONDITION',                                             id: 'S2load_cond', mazakId: 'S2load_cond' },
+      { type: 'TEMPERATURE',     category: 'CONDITION',                                             id: 'S2temp_cond', mazakId: 'S2temp_cond' }
+    ]
+  },
+
+  /* ───── Controller / Path (Mazak has a *very* dense path) ───── */
+  'controller': {
+    kind: 'Controller', name: 'controller', id: 'cont',
+    dataItems: [
+      { type: 'EMERGENCY_STOP', category: 'EVENT',                                          id: 'estop',           mazakId: 'estop' },
+      { type: 'COMMUNICATIONS', category: 'CONDITION',                                       id: 'comms_cond',      mazakId: 'comms_cond' },
+      { type: 'LOGIC_PROGRAM',  category: 'CONDITION',                                       id: 'logic_cond',      mazakId: 'logic_cond' },
+      { type: 'SYSTEM',         category: 'CONDITION',                                       id: 'system_cond',     mazakId: 'system_cond' }
+    ],
+    children: [{
+      kind: 'Path', name: 'path', id: 'path1',
+      dataItems: [
+        { type: 'EXECUTION',       category: 'EVENT',                                                 id: 'execution',     mazakId: 'execution' },
+        { type: 'CONTROLLER_MODE', category: 'EVENT',                                                 id: 'mode',          mazakId: 'mode' },
+        { type: 'PROGRAM',         category: 'EVENT', subType: 'MAIN',                                id: 'program',       mazakId: 'program' },
+        { type: 'PROGRAM',         category: 'EVENT', subType: 'ACTIVE',                              id: 'activeprog',    mazakId: 'activeprog' },
+        { type: 'TOOL_NUMBER',     category: 'EVENT',                                                 id: 'Tool_number',   mazakId: 'Tool_number' },
+        { type: 'TOOL_GROUP',      category: 'EVENT',                                                 id: 'Tool_group',    mazakId: 'Tool_group' },
+        { type: 'PART_COUNT',      category: 'EVENT',                                                 id: 'PartCountAct',  mazakId: 'PartCountAct' },
+        { type: 'PATH_FEEDRATE',   category: 'SAMPLE', subType: 'ACTUAL', units: 'MILLIMETER/SECOND', id: 'Fact',          mazakId: 'Fact' },
+        { type: 'PATH_POSITION',   category: 'SAMPLE',                    units: 'MILLIMETER_3D',    id: 'pathpos',       mazakId: 'pathpos' },
+        { type: 'WAIT_STATE',      category: 'EVENT',                                                 id: 'waitstate',     mazakId: 'waitstate' },
+        { type: 'CHUCK_STATE',     category: 'EVENT',                                                 id: 'hd1chuckstate', mazakId: 'hd1chuckstate' },
+        { type: 'MOTION_PROGRAM',  category: 'CONDITION',                                             id: 'motion_cond',   mazakId: 'motion_cond' },
+        { type: 'SYSTEM',          category: 'CONDITION',                                             id: 'path_system',   mazakId: 'path_system' }
+      ]
+    }]
+  },
+
+  /* ───── Systems (what the real Mazak's Systems wrapper contains) ───── */
+  'coolant': {
+    kind: 'Coolant', name: 'coolant', id: 'coolant', parentKind: 'Systems',
+    dataItems: [
+      { type: 'PRESSURE',    category: 'SAMPLE',    units: 'PASCAL',  id: 'cool_pressure', mazakId: 'cool_pressure' },
+      { type: 'LEVEL',       category: 'SAMPLE',    units: 'PERCENT', id: 'cool_level',    mazakId: 'cool_level' },
+      { type: 'TEMPERATURE', category: 'SAMPLE',    units: 'CELSIUS', id: 'cool_temp',     mazakId: 'cool_temp' }
+    ]
+  },
+  'electric': {
+    kind: 'Electric', name: 'electric', id: 'elec', parentKind: 'Systems',
+    dataItems: [
+      { type: 'VOLTAGE_AC', category: 'CONDITION', id: 'elec_cond', mazakId: 'elec_cond' }
+    ]
+  },
+  'hydraulic': {
+    kind: 'Hydraulic', name: 'hydraulic', id: 'hydraulic', parentKind: 'Systems',
+    dataItems: [
+      { type: 'PRESSURE', category: 'SAMPLE', units: 'PASCAL', id: 'hyd_pressure', mazakId: 'hyd_pressure' }
+    ]
+  },
+  'pneumatic': {
+    kind: 'Pneumatic', name: 'pneumatic', id: 'pneumatic', parentKind: 'Systems',
+    dataItems: [
+      { type: 'PRESSURE', category: 'SAMPLE', units: 'PASCAL', id: 'pneu_pressure', mazakId: 'pneu_pressure' }
+    ]
+  },
+  'lubrication': {
+    kind: 'Lubrication', name: 'lubrication', id: 'lubrication', parentKind: 'Systems',
+    dataItems: [
+      { type: 'PRESSURE', category: 'SAMPLE', units: 'PASCAL',  id: 'lub_pressure', mazakId: 'lub_pressure' },
+      { type: 'LEVEL',    category: 'SAMPLE', units: 'PERCENT', id: 'lub_level',    mazakId: 'lub_level' }
+    ]
+  },
+
+  /* ───── Auxiliaries ───── */
+  'door': {
+    kind: 'Door', name: 'door', id: 'door1', parentKind: 'Auxiliaries',
+    dataItems: [
+      { type: 'DOOR_STATE', category: 'EVENT', id: 'doorstate', mazakId: 'doorstate' }
+    ]
+  },
+  'environmental': {
+    kind: 'Environmental', name: 'room', id: 'room', parentKind: 'Auxiliaries',
+    dataItems: [
+      { type: 'TEMPERATURE', category: 'SAMPLE', units: 'CELSIUS', id: 'room_temp', mazakId: 'room_temp' }
+    ]
+  },
+  'enclosure': {
+    kind: 'Enclosure', name: 'enclosure', id: 'enclosurem', parentKind: 'Auxiliaries',
+    dataItems: [
+      { type: 'DOOR_STATE', category: 'EVENT', id: 'enc_door', mazakId: 'enc_door' }
+    ]
+  },
+
+  /* ───── Parts & Resources ───── */
+  'parts': {
+    kind: 'Parts', name: 'parts', id: 'parts', parentKind: 'Parts',
+    children: [{
+      kind: 'PartOccurrence', name: 'partocc', id: 'partocc',
+      dataItems: [
+        { type: 'PART_COUNT',   category: 'EVENT', id: 'po_count', mazakId: 'po_count' },
+        { type: 'PART_KIND_ID', category: 'EVENT', id: 'po_kind',  mazakId: 'po_kind' }
+      ]
+    }]
+  },
+  'resources': {
+    kind: 'Resources', name: 'resources', id: 'resourcesm', parentKind: 'Resources',
+    children: [
+      { kind: 'Personnel', name: 'personnel', id: 'personnelm',
+        dataItems: [ { type: 'USER', category: 'EVENT', id: 'user', mazakId: 'user' } ] },
+      { kind: 'Materials', name: 'materials', id: 'materials',
+        children: [{ kind: 'Stock', name: 'stock', id: 'procstock',
+          dataItems: [ { type: 'MATERIAL_FEED', category: 'EVENT', id: 'matf', mazakId: 'matf' } ] }] }
+    ]
+  },
+
+  /* ───── Device root (required first step — the document body wrapper) ───── */
+  'device': {
+    kind: 'Device', name: 'MyCNC', id: 'd1', parentKind: 'Root',
+    dataItems: [
+      { type: 'AVAILABILITY',  category: 'EVENT', id: 'avail',        mazakId: 'avail' },
+      { type: 'ASSET_CHANGED', category: 'EVENT', id: 'd1_asset_chg', mazakId: 'd1_asset_chg' },
+      { type: 'ASSET_REMOVED', category: 'EVENT', id: 'd1_asset_rem', mazakId: 'd1_asset_rem' }
+    ]
+  },
+
+  /* ───── Device-level DataItems (what the real Mazak <Device> carries) ───── */
+  'device-equipment-mode': {
+    kind: 'DeviceLevel', name: 'equipment_modes', id: 'em', parentKind: 'Device',
+    dataItems: [
+      { type: 'EQUIPMENT_MODE', category: 'EVENT', subType: 'LOADED',    id: 'emloaded',    mazakId: 'emloaded' },
+      { type: 'EQUIPMENT_MODE', category: 'EVENT', subType: 'WORKING',   id: 'emworking',   mazakId: 'emworking' },
+      { type: 'EQUIPMENT_MODE', category: 'EVENT', subType: 'OPERATING', id: 'emoperating', mazakId: 'emoperating' },
+      { type: 'EQUIPMENT_MODE', category: 'EVENT', subType: 'POWERED',   id: 'empowered',   mazakId: 'empowered' },
+      { type: 'EQUIPMENT_MODE', category: 'EVENT', subType: 'DELAY',     id: 'emdelay',     mazakId: 'emdelay' }
+    ]
+  }
+};
+
+// Total Mazak component slots, for tree-fullness reporting:
+const FULL_MAZAK_SLOTS = Object.keys(COMPONENTS).length;
+
+// Persisted state: an ordered list of slots added.
+// Each slot is { key, instanceId } where key is a COMPONENTS key.
+let machine = []; // array of { key, slotId }
+let slotCounter = 0;
+
+const $ = sel => document.querySelector(sel);
+const $$ = sel => document.querySelectorAll(sel);
+
+/* Touch/no-hover detection, used to swap mouseenter/mouseleave-driven
+   interactions (tree ↔ XML hover-highlight + definition tooltip) for a
+   tap-to-toggle equivalent on devices that can't hover. */
+const IS_TOUCH = window.matchMedia('(hover: none), (pointer: coarse)').matches;
+document.documentElement.classList.toggle('is-touch', IS_TOUCH);
+let activeTouchTreeLine = null;
+
+/* ---------- Add / remove ---------- */
+/* Keys allowed more than once. Each insertion gets a fresh slot id (and a
+   schema-valid auto-name if the COMPONENTS entry declares autoName).        */
+const MULTI_INSTANCE = new Set([]);  // Mazak has fixed single-instance components
+
+/* Resolve a slot into a render-ready component definition.
+   Applies two slot-level overrides:
+     • slot.name      — auto-named components (e.g. rotary joints J1..J6)
+     • slot.categories — Set<'SAMPLE'|'EVENT'|'CONDITION'>; if absent, all
+                         DataItems are included. If present, DataItems whose
+                         category is not in the set are filtered out — both
+                         at this component's level and on any nested children. */
+function resolveSlot(slot) {
+  const def = COMPONENTS[slot.key];
+  const cats = slot.categories;          // Set or undefined
+  const lc = slot.name ? slot.name.toLowerCase() : null;
+
+  const passCat = di => !cats || cats.has(di.category);
+  const transformDI = di => lc ? { ...di, id: di.id + '_' + lc } : di;
+  const filterAndTransform = arr => (arr || []).filter(passCat).map(transformDI);
+
+  return {
+    ...def,
+    ...(slot.name ? { name: slot.name, id: lc } : {}),
+    dataItems: filterAndTransform(def.dataItems),
+    children: (def.children || []).map(ch => ({
+      ...ch,
+      dataItems: filterAndTransform(ch.dataItems)
+    }))
+  };
+}
+
+/* Count this component's DataItems by category (top-level + nested children).
+   Returns { SAMPLE: [...], EVENT: [...], CONDITION: [...] } — the arrays
+   contain the actual DataItem records so the dialog can show a preview. */
+function countByCategory(def) {
+  const buckets = { SAMPLE: [], EVENT: [], CONDITION: [] };
+  const visit = c => {
+    (c.dataItems || []).forEach(di => { if (buckets[di.category]) buckets[di.category].push(di); });
+    (c.children || []).forEach(visit);
+  };
+  visit(def);
+  return buckets;
+}
+
+/* The Device is the required root: no other piece can be added until it
+   exists. This mirrors the MTConnect schema, where every other element lives
+   inside a Device. */
+const hasDevice = () => machine.some(s => s.key === 'device');
+
+/* Two-phase add: most chips ask the user which DataItem categories they want
+   before committing. Components whose DataItems all belong to a single
+   category bypass the dialog. Clicking a chip whose component is already
+   placed (and is multi-category) re-opens the dialog in EDIT mode so the
+   user can change its DataItem selections without removing first. */
+function addComponent(key, presetCategories) {
+  if (!COMPONENTS[key]) return;
+  const def = COMPONENTS[key];
+  // Gate: everything except Device requires a Device to exist first.
+  if (key !== 'device' && !hasDevice()) {
+    flash('Create the Device first — it is the required root.');
+    return;
+  }
+
+  // Preset path (loadPreset): skip the dialog and add with all categories.
+  if (presetCategories) {
+    commitAdd(key, presetCategories);
+    return;
+  }
+
+  const buckets = countByCategory(def);
+  const present = Object.keys(buckets).filter(k => buckets[k].length > 0);
+  const existingSlot = !MULTI_INSTANCE.has(key) ? machine.find(s => s.key === key) : null;
+
+  if (existingSlot) {
+    // Single-category components have nothing the user could change — flash.
+    if (present.length <= 1) {
+      flash(`Already added: ${def.kind} "${def.name}". Use [remove] in the tree to delete it.`);
+      return;
+    }
+    // Multi-category → open dialog in EDIT mode (pre-populated, lets user
+    // toggle categories on/off without deleting the component).
+    openCategoryDialog(key, buckets, existingSlot);
+    return;
+  }
+
+  if (present.length <= 1) {
+    // Single-category component → no choice to make, add immediately.
+    commitAdd(key, new Set(present));
+  } else {
+    // Multi-category → ask the user what they want.
+    openCategoryDialog(key, buckets, null);
+  }
+}
+
+function commitAdd(key, categories) {
+  const def = COMPONENTS[key];
+  let instanceName = null;
+  if (def.autoName) {
+    const used = new Set(machine.filter(s => s.key === key).map(s => s.name));
+    instanceName = def.autoName.find(n => !used.has(n));
+    if (!instanceName) { flash(`Out of names for ${def.kind}`); return; }
+  }
+  machine.push({ key, slotId: ++slotCounter, name: instanceName, categories });
+  rerender();
+}
+
+/* ---------- Category picker dialog ---------- */
+const CATEGORY_META = {
+  SAMPLE: {
+    label: 'Measurements & continuous values',
+    desc: 'Numeric values sampled at a point in time on a continuous scale — physical readings like positions, speeds, temperatures, loads, pressures, flows, as well as derived values like update rates and accumulated times.'
+  },
+  EVENT: {
+    label: 'States & events',
+    desc: 'Discrete values that change at specific moments — operating mode, program name, tool number, door open/closed, execution state.'
+  },
+  CONDITION: {
+    label: 'Health & faults',
+    desc: 'Normal / warning / fault signals from hardware, control systems, actuators, and sensors.'
+  }
+};
+
+let pendingKey  = null;  // key of the component currently being configured
+let pendingSlot = null;  // existing slot when in EDIT mode; null when in ADD mode
+
+function openCategoryDialog(key, buckets, existingSlot) {
+  pendingKey  = key;
+  pendingSlot = existingSlot || null;
+  const isEdit = !!existingSlot;
+  const def = COMPONENTS[key];
+  const labelName = (def.kind || '') + (def.name && def.name !== def.kind ? ` "${def.name}"` : '');
+
+  // Title + subtitle adapt to mode
+  $('#catTitle').innerHTML = isEdit
+    ? `Update <span class="accent">${labelName}</span> DataItems`
+    : `What kind of data do you want from <span class="accent">${labelName}</span>?`;
+  $('#catSub').textContent = isEdit
+    ? 'Existing selections are pre-checked. Updating replaces this component’s DataItems — nothing else about the device changes.'
+    : 'MTConnect groups DataItems into three categories. Pick the kinds that matter to you — only those will appear in the device file and the live stream.';
+
+  // Buttons
+  $('#catConfirm').textContent = isEdit ? 'Update DataItems' : 'Add to device';
+  $('#catRemove').style.display = isEdit ? '' : 'none';
+
+  // Build the option rows
+  const opts = $('#catOptions');
+  opts.innerHTML = '';
+  ['SAMPLE', 'EVENT', 'CONDITION'].forEach(cat => {
+    const list = buckets[cat];
+    if (!list.length) return;
+    const meta = CATEGORY_META[cat];
+    const preview = list.map(di => di.type + (di.subType ? '.' + di.subType : '')).filter((v,i,a) => a.indexOf(v) === i).join(' · ');
+    const checked = isEdit && existingSlot.categories && existingSlot.categories.has(cat) ? ' checked' : '';
+    const row = document.createElement('label');
+    row.className = 'cat-opt';
+    row.innerHTML = `
+      <input type="checkbox" data-cat="${cat}"${checked}>
+      <div class="cat-opt-body">
+        <div class="cat-opt-title">${meta.label} <span class="canon">${cat}</span> <span class="count">${list.length} DataItem${list.length === 1 ? '' : 's'}</span></div>
+        <div class="cat-opt-desc">${meta.desc}</div>
+        <div class="cat-opt-preview">${preview}</div>
+      </div>`;
+    opts.appendChild(row);
+  });
+  opts.querySelectorAll('input[type=checkbox]').forEach(cb =>
+    cb.addEventListener('change', updateConfirmButtonState)
+  );
+  updateConfirmButtonState();
+  $('#catDialog').style.display = '';
+}
+
+function updateConfirmButtonState() {
+  const any = !!$('#catOptions').querySelector('input[type=checkbox]:checked');
+  $('#catConfirm').disabled = !any;
+}
+
+function confirmCategoryDialog() {
+  if (!pendingKey) return;
+  const picked = new Set();
+  $('#catOptions').querySelectorAll('input[type=checkbox]:checked').forEach(cb => picked.add(cb.dataset.cat));
+  if (!picked.size) return;
+  const key = pendingKey;
+  const slot = pendingSlot;
+  closeCategoryDialog();
+  if (slot) {
+    // EDIT mode: replace the slot's categories in place; preserves slotId so
+    // the tree's collapsed-state and any references remain stable.
+    slot.categories = picked;
+    rerender();
+  } else {
+    commitAdd(key, picked);
+  }
+}
+
+function removeFromCategoryDialog() {
+  if (!pendingSlot) return;
+  const slotId = pendingSlot.slotId;
+  closeCategoryDialog();
+  removeComponent(slotId);
+}
+
+function closeCategoryDialog() {
+  pendingKey  = null;
+  pendingSlot = null;
+  $('#catDialog').style.display = 'none';
+}
+function removeComponent(slotId) {
+  const slot = machine.find(s => s.slotId === slotId);
+  // Can't yank the Device out from under everything else.
+  if (slot && slot.key === 'device' && machine.length > 1) {
+    flash('Remove the other components first, then the Device.');
+    return;
+  }
+  machine = machine.filter(s => s.slotId !== slotId);
+  rerender();
+}
+function reset() { machine = []; rerender(); }
+
+function loadPreset(name) {
+  reset();
+  const ALL_CATS = new Set(['SAMPLE','EVENT','CONDITION']);
+  // Always create the Device first — every preset is meaningless without it.
+  addComponent('device', ALL_CATS);
+  if (name === 'starter') {
+    ['linear-x','linear-y','linear-z'].forEach(k => addComponent(k, ALL_CATS));
+  } else if (name === 'full') {
+    Object.keys(COMPONENTS).filter(k => k !== 'device').forEach(k => addComponent(k, ALL_CATS));
+  }
+}
+
+/* Organizers (Axes/Systems/Auxiliaries) are implicit wrappers — created at
+   render time, not in COMPONENTS. They need their own id/name so the device
+   XML is schema-faithful (matches the real backend's structure). */
+const ORGANIZER_META = {
+  Axes:        { id: 'a',          name: 'base' },
+  Systems:     { id: 'systems',    name: 'systems' },
+  Auxiliaries: { id: 'aux',        name: 'auxiliaries' }
+};
+
+/* SNAKE_CASE_TYPE → CamelCase for the tree-view DataItem labels. */
+function toCamel(s) {
+  return (s || '').toLowerCase().split('_').filter(Boolean)
+    .map(w => w[0].toUpperCase() + w.slice(1)).join('');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MTConnect definitions, baked from model.mtconnect.org (V2.8):
+   ComponentTypes leaves, SampleEnum, EventEnum, ConditionEnum,
+   DataItemSubTypeEnum, and the Device page. Covers every element
+   the palette can produce.
+   ───────────────────────────────────────────────────────────── */
+const MTC_DEFS = {
+  COMPONENT: {
+    'Device': "Component composed of a piece of equipment that produces observations about itself.",
+    'Linear': "Axis that provides prismatic motion along a fixed axis.",
+    'Rotary': "Axis that provides rotation about a fixed axis.",
+    'Controller': "System that provides regulation or management of a system or component.",
+    'Path': "Component that organizes an independent operation or function within a Controller.",
+    'Coolant': "System that provides distribution and management of fluids that remove heat from a piece of equipment.",
+    'Electric': "System composed of the main power supply for the piece of equipment that provides distribution of that power throughout the equipment.",
+    'Hydraulic': "System that provides movement and distribution of pressurized liquid throughout the piece of equipment.",
+    'Pneumatic': "System that uses compressed gasses to actuate components or do work within the piece of equipment.",
+    'Lubrication': "System that provides distribution and management of fluids used to lubricate portions of the piece of equipment.",
+    'Door': "Component composed of a mechanical mechanism or closure that can cover a physical access portal into a piece of equipment.",
+    'Environmental': "Component that observes the surroundings of another Component.",
+    'Enclosure': "System composed of a structure that is used to contain or isolate a piece of equipment or area.",
+    'PartOccurrence': "Part that exists at a specific place and time, such as a specific instance of a bracket at a specific timestamp.",
+    'Personnel': "Resource composed of an individual or individuals who either control, support, or otherwise interface with a piece of equipment.",
+    'Stock': "Material used in a manufacturing process and to which work is applied in a machine or piece of equipment to produce parts.",
+    'Axes': "Component that organizes Axis types (Linear, Rotary).",
+    'Systems': "Component that organizes System types (Coolant, Hydraulic, Pneumatic, Electric, Lubrication, …).",
+    'Auxiliaries': "Component that organizes Auxiliary types (Door, Environmental, Enclosure, …).",
+    'Parts': "Component that organizes Part types.",
+    'Resources': "Component that organizes Resource types (Personnel, Materials).",
+    'Materials': "Resources that organizes Material types."
+  },
+  SAMPLE: {
+    'POSITION': "point along an axis in a cartesian coordinate system.",
+    'LOAD': "actual versus the standard rating of a piece of equipment.",
+    'TEMPERATURE': "degree of hotness or coldness measured on a definite scale.",
+    'ANGLE': "angular position.",
+    'AXIS_FEEDRATE': "feedrate of a linear axis.",
+    'PATH_FEEDRATE': "feedrate for the axes, or a single axis, associated with a Path component.",
+    'PATH_POSITION': "position of a control point associated with a Controller or a Path.",
+    'ROTARY_VELOCITY': "rotational speed of a rotary axis.",
+    'PRESSURE': "force per unit area measured relative to atmospheric pressure (gauge pressure).",
+    'LEVEL': "level of a resource. (deprecated in v1.2 — see FILL_LEVEL)",
+    'VOLTAGE_AC': "electrical potential between two points in an electrical circuit in which the current periodically reverses direction."
+  },
+  EVENT: {
+    'AVAILABILITY': "agent's ability to communicate with the data source.",
+    'ASSET_CHANGED': "Asset::assetId of the Asset that has been changed.",
+    'ASSET_REMOVED': "Asset::assetId of the Asset that has been removed.",
+    'AXIS_STATE': "state of a Linear or Rotary component representing an axis.",
+    'ROTARY_MODE': "current operating mode for a Rotary type axis.",
+    'EXECUTION': "operating state of a Component.",
+    'CONTROLLER_MODE': "current mode of the Controller component.",
+    'PROGRAM': "name of the logic or motion program being executed by the Controller component.",
+    'TOOL_NUMBER': "identifier assigned by the Controller component to a cutting tool when in use by a piece of equipment.",
+    'TOOL_GROUP': "identifier for the tool group associated with a specific tool (commonly used to designate spare tools).",
+    'PART_COUNT': "aggregate count of parts.",
+    'CHUCK_STATE': "operating state of a mechanism that holds a part or stock material during a manufacturing process.",
+    'WAIT_STATE': "indication of the reason that Execution is reporting a value of WAIT.",
+    'EMERGENCY_STOP': "state of the emergency stop signal for a piece of equipment, controller path, or any other component or subsystem.",
+    'DOOR_STATE': "operational state of a Door component or composition element.",
+    'EQUIPMENT_MODE': "indication that a piece of equipment, or a sub-part of a piece of equipment, is performing specific types of activities.",
+    'USER': "identifier of the person currently responsible for operating the piece of equipment.",
+    'MATERIAL_FEED': "operating state of the service to advance material or feed product to a piece of equipment from a continuous or bulk source.",
+    'PART_KIND_ID': "identifier given to link the individual occurrence to a class of parts, typically distinguished by a particular part design."
+  },
+  CONDITION: {
+    'ACTUATOR': "indication of a fault associated with an actuator.",
+    'COMMUNICATIONS': "indication that the piece of equipment has experienced a communications failure.",
+    'LOGIC_PROGRAM': "indication that an error occurred in the logic program or programmable logic controller (PLC) associated with a piece of equipment.",
+    'MOTION_PROGRAM': "indication that an error occurred in the motion program associated with a piece of equipment.",
+    'SYSTEM': "general purpose indication associated with an electronic component of a piece of equipment or a controller that represents a fault that is not associated with the operator, program, or hardware."
+  },
+  SUBTYPE: {
+    'ACTUAL': "reported value of an observation.",
+    'MAIN': "relating to the primary logic or motion program currently being executed.",
+    'ACTIVE': "relating to logic or motion program currently executing.",
+    'LOADED': "indication that the subparts of a piece of equipment are under load.",
+    'WORKING': "piece of equipment performing any activity — active and performing a function under load or not.",
+    'OPERATING': "piece of equipment that is powered or performing any activity.",
+    'POWERED': "piece of equipment is powered and functioning.",
+    'DELAY': "elapsed time of a temporary halt of action."
+  }
+};
+
+/* Given a tree node, resolve to { name, kind, def, subNote, note } for the tooltip. */
+function lookupDefinition(node) {
+  if (!node) return null;
+  if (node.kind === 'device' || node.kind === 'component' || node.kind === 'organizer') {
+    const def = MTC_DEFS.COMPONENT[node.name];
+    if (!def) return null;
+    const kindLabel = node.kind === 'device' ? 'Device' : (node.kind === 'organizer' ? 'Organizer' : 'Component');
+    return { name: node.name, kind: kindLabel, def, subNote: null, note: null };
+  }
+  if (node.kind === 'dataitem') {
+    const t = node.diType, sub = node.diSubType, cat = node.diCat;
+    if (!t) return null;
+    // For CONDITION category, canonical CONDITION types (SYSTEM, ACTUATOR, …) come from CONDITION enum;
+    // other types (POSITION as travel-condition, LOAD, TEMPERATURE, VOLTAGE_AC) reuse their SAMPLE/EVENT definition
+    // with a note explaining the CONDITION usage.
+    let def, note = null;
+    if (cat === 'CONDITION') {
+      def = MTC_DEFS.CONDITION[t] || MTC_DEFS.SAMPLE[t] || MTC_DEFS.EVENT[t];
+      if (!MTC_DEFS.CONDITION[t] && def) note = 'Applied here as a NORMAL / WARNING / FAULT indication for this value.';
+    } else if (cat === 'SAMPLE') {
+      def = MTC_DEFS.SAMPLE[t];
+    } else {
+      def = MTC_DEFS.EVENT[t];
+    }
+    if (!def) return null;
+    const subDef = sub ? MTC_DEFS.SUBTYPE[sub] : null;
+    return {
+      name: t + (sub ? '.' + sub : ''),
+      kind: cat || 'DataItem',
+      def,
+      subNote: subDef ? { sub, desc: subDef } : null,
+      note
+    };
+  }
+  return null;
+}
+
+/* Definition-text sanitization applied at render time. Two rules:
+     1. Drop SysML stereotypes wrapped in guillemets: «abstract», «extensible»,
+        «informative», …  — including any single trailing space.
+     2. Reduce SysML canonical-path notation `foo::bar::baz` to its final
+        segment: "Asset::assetId" → "assetId"; "a::b::c::d" → "d".
+   Words without either pattern are untouched. Runtime-applied so future
+   definitions (either baked from newer model versions, or hand-added)
+   are cleaned automatically. */
+function cleanDef(s) {
+  return (s || '')
+    .replace(/«[^»]*»\s?/g, '')
+    .replace(/[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+/g,
+      m => m.split('::').pop());
+}
+
+/* Show / hide / position the tooltip */
+let tipHoverTimer = null;
+function showDefTip(node, anchorEl) {
+  const info = lookupDefinition(node);
+  const tip = $('#defTip');
+  if (!info) { tip.classList.remove('show'); return; }
+  $('#defTipName').textContent = info.name;
+  $('#defTipKind').textContent = info.kind;
+  $('#defTipBody').textContent = cleanDef(info.def);
+  const subEl = $('#defTipSub');
+  if (info.subNote) {
+    subEl.innerHTML = `<span class="st">${info.subNote.sub}</span> — ${cleanDef(info.subNote.desc)}`;
+    subEl.style.display = '';
+  } else {
+    subEl.style.display = 'none';
+  }
+  const noteEl = $('#defTipNote');
+  if (info.note) { noteEl.textContent = info.note; noteEl.style.display = ''; }
+  else            { noteEl.style.display = 'none'; }
+  // Position: prefer to the right of the anchor row; flip left if it would overflow;
+  // clamp vertically so it doesn't fall off-screen.
+  const rect = anchorEl.getBoundingClientRect();
+  tip.style.left = '0px'; tip.style.top = '0px';   // reset before measuring
+  tip.style.display = 'block';
+  const tipW = tip.offsetWidth, tipH = tip.offsetHeight;
+  let left = rect.right + 12;
+  if (left + tipW + 8 > window.innerWidth) left = Math.max(8, rect.left - tipW - 12);
+  let top = rect.top;
+  if (top + tipH + 8 > window.innerHeight) top = Math.max(8, window.innerHeight - tipH - 8);
+  tip.style.left = left + 'px';
+  tip.style.top  = top + 'px';
+  tip.classList.add('show');
+}
+function hideDefTip() {
+  clearTimeout(tipHoverTimer); tipHoverTimer = null;
+  const tip = $('#defTip');
+  tip.classList.remove('show');
+  // Keep display:block until fade-out completes so the transition runs
+  setTimeout(() => { if (!tip.classList.contains('show')) tip.style.display = 'none'; }, 130);
+}
+
+/* Node-IDs are shared by the tree-view and the XML pane so hover-to-highlight
+   can link them. Both renderers compute the same nid for the same logical
+   element. Schema:
+     dev                    → the Device root
+     di:<id>                → a DataItem (by its DataItem id, which is unique)
+     org:<Tag>              → an implicit organizer (Axes / Systems / Auxiliaries)
+     comp:<slotId>          → a top-level component slot (Linear X, Controller, …)
+     sub:<parentNid>:<id>   → a nested child component (Path under Controller, …)
+*/
+
+// Which nodes the user has collapsed (clicked the ▼ on). Stable across renders.
+const collapsedNodes = new Set();
+
+/* Walk the machine and return a flat array of tree nodes in DOM order.
+   { nid, parentNid, depth, kind, name, compId, slotId? }
+   kind ∈ 'device' | 'organizer' | 'component' | 'dataitem' */
+function buildNodeTree() {
+  const out = [];
+  const deviceSlot = machine.find(s => s.key === 'device');
+  if (!deviceSlot) return out;
+  const devC = resolveSlot(deviceSlot);
+
+  out.push({ nid: 'dev', parentNid: null, depth: 0, kind: 'device', name: devC.kind, compId: devC.id, slotId: deviceSlot.slotId });
+
+  // Device's own DataItems
+  (devC.dataItems || []).forEach(di => {
+    out.push({ nid: 'di:' + di.id, parentNid: 'dev', depth: 1, kind: 'dataitem',
+               name: toCamel(di.type) + (di.subType ? '.' + toCamel(di.subType) : ''), compId: di.id,
+                 diType: di.type, diSubType: di.subType || null, diCat: di.category });
+  });
+
+  // Extra Device-level slots (e.g. device-equipment-mode): render the slot as a
+  // virtual organizer node with its DataItems as children, so the user can
+  // collapse / remove the whole bundle as a unit.
+  machine.filter(s => s.key !== 'device' && resolveSlot(s).parentKind === 'Device').forEach(s => {
+    const rs = resolveSlot(s);
+    const groupNid = 'comp:' + s.slotId;
+    out.push({ nid: groupNid, parentNid: 'dev', depth: 1, kind: 'organizer',
+               name: rs.name || rs.kind, compId: rs.id || ('slot' + s.slotId), slotId: s.slotId });
+    (rs.dataItems || []).forEach(di => {
+      out.push({ nid: 'di:' + di.id, parentNid: groupNid, depth: 2, kind: 'dataitem',
+                 name: toCamel(di.type) + (di.subType ? '.' + toCamel(di.subType) : ''), compId: di.id,
+                 diType: di.type, diSubType: di.subType || null, diCat: di.category });
+    });
+  });
+
+  // Recursive walker for components + their DataItems + their children
+  const walkComp = (parentNid, parentDepth, compDef, slotId) => {
+    const nid = slotId ? 'comp:' + slotId : parentNid + '>' + compDef.id;
+    out.push({ nid, parentNid, depth: parentDepth + 1, kind: 'component',
+               name: compDef.kind, compId: compDef.id, slotId });
+    (compDef.dataItems || []).forEach(di => {
+      out.push({ nid: 'di:' + di.id, parentNid: nid, depth: parentDepth + 2, kind: 'dataitem',
+                 name: toCamel(di.type) + (di.subType ? '.' + toCamel(di.subType) : ''), compId: di.id,
+                 diType: di.type, diSubType: di.subType || null, diCat: di.category });
+    });
+    (compDef.children || []).forEach(child => walkComp(nid, parentDepth + 1, child, null));
+  };
+
+  // Bucket and emit components
+  const axes  = machine.filter(s => ['Linear','Rotary'].includes(resolveSlot(s).kind));
+  const ctrl  = machine.filter(s => resolveSlot(s).kind === 'Controller');
+  const sys   = machine.filter(s => resolveSlot(s).parentKind === 'Systems');
+  const aux   = machine.filter(s => resolveSlot(s).parentKind === 'Auxiliaries');
+  const parts = machine.filter(s => resolveSlot(s).kind === 'Parts');
+  const res   = machine.filter(s => resolveSlot(s).kind === 'Resources');
+
+  const renderOrg = (tag, slots) => {
+    if (!slots.length) return;
+    const meta = ORGANIZER_META[tag];
+    const orgNid = 'org:' + tag;
+    out.push({ nid: orgNid, parentNid: 'dev', depth: 1, kind: 'organizer', name: tag, compId: meta.id });
+    slots.forEach(s => walkComp(orgNid, 1, resolveSlot(s), s.slotId));
+  };
+
+  renderOrg('Axes', axes);
+  ctrl.forEach(s => walkComp('dev', 0, resolveSlot(s), s.slotId));
+  renderOrg('Systems', sys);
+  renderOrg('Auxiliaries', aux);
+  parts.forEach(s => walkComp('dev', 0, resolveSlot(s), s.slotId));
+  res.forEach(s => walkComp('dev', 0, resolveSlot(s), s.slotId));
+
+  return out;
+}
+
+/* Hover-to-highlight wiring */
+function highlightXmlNode(nid) {
+  document.querySelectorAll(`#xmlPane .xn[data-nid="${nid}"]`).forEach(el => el.classList.add('xml-hl'));
+}
+function clearXmlHighlight() {
+  document.querySelectorAll('#xmlPane .xn.xml-hl').forEach(el => el.classList.remove('xml-hl'));
+}
+
+/* ---------- Render: tree (Name[id] format, expand/collapse + XML hover) ---------- */
+function rerenderTree() {
+  const root = $('#tree');
+  const nodes = buildNodeTree();
+  if (!nodes.length) {
+    root.innerHTML = `<div style="padding:8px 4px;color:var(--muted);font-size:12px">No Device yet. Click <strong style="color:var(--accent)">Device</strong> on the left to create the document root.</div>`;
+    return;
+  }
+
+  // Build a children index so we can compute hasChildren + ancestor-collapse hiding
+  const childrenOf = new Map();
+  nodes.forEach(n => childrenOf.set(n.nid, []));
+  nodes.forEach(n => { if (n.parentNid) (childrenOf.get(n.parentNid) || []).push(n.nid); });
+  const byNid = new Map(nodes.map(n => [n.nid, n]));
+
+  // A node is hidden if any ancestor is collapsed
+  const hiddenByAncestor = nid => {
+    let cur = byNid.get(nid);
+    while (cur && cur.parentNid) {
+      if (collapsedNodes.has(cur.parentNid)) return true;
+      cur = byNid.get(cur.parentNid);
+    }
+    return false;
+  };
+
+  // Removable nodes are top-level slots that were actually added by the user.
+  // (Nested sub-components and DataItems don't carry their own slotId.)
+  const isRemovable = n => !!n.slotId;
+
+  const lines = nodes.map(n => {
+    const hidden = hiddenByAncestor(n.nid) ? ' style="display:none;padding-left:' + (n.depth*16 + 6) + 'px"' : ` style="padding-left:${n.depth*16 + 6}px"`;
+    const hasKids = (childrenOf.get(n.nid) || []).length > 0;
+    const collapsed = collapsedNodes.has(n.nid);
+    const tgChar = hasKids ? (collapsed ? '▶' : '▼') : '·';
+    const tgCls  = hasKids ? '' : ' leaf';
+    const toggle = `<span class="tg${tgCls}" data-toggle="${n.nid}">${tgChar}</span>`;
+    const removable = isRemovable(n) ? ` <span class="remove" data-remove="${n.slotId}">[remove]</span>` : '';
+    const cls = `tree-line ${n.kind}`;
+    return `<div class="${cls}" data-nid="${n.nid}"${hidden}>${toggle}<span class="tn">${n.name}</span><span class="ti">[${n.compId}]</span>${removable}</div>`;
+  });
+
+  root.innerHTML = lines.join('');
+
+  // Toggles: click ▼/▶ to fold/unfold a subtree
+  root.querySelectorAll('[data-toggle]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const nid = el.dataset.toggle;
+      const node = byNid.get(nid);
+      if (!node || !(childrenOf.get(nid) || []).length) return;  // leaves are inert
+      if (collapsedNodes.has(nid)) collapsedNodes.delete(nid);
+      else                          collapsedNodes.add(nid);
+      rerenderTree();
+    });
+  });
+
+  // Remove buttons (top-level slot removal)
+  root.querySelectorAll('[data-remove]').forEach(el =>
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      removeComponent(Number(el.dataset.remove));
+    })
+  );
+
+  // Hover: highlight tree row + matching XML span (and descendants) + show
+  // definition tooltip after a short delay so quick scrolls don't spawn tips.
+  // On touch devices there's no hover signal, so a tap toggles the same
+  // highlight/tooltip state instead (tap again, or tap elsewhere, to dismiss).
+  const activateLine = (el, node) => {
+    if (activeTouchTreeLine && activeTouchTreeLine !== el) {
+      activeTouchTreeLine.classList.remove('hover-active');
+    }
+    el.classList.add('hover-active');
+    highlightXmlNode(el.dataset.nid);
+    showDefTip(node, el);
+    activeTouchTreeLine = el;
+  };
+  const deactivateLine = el => {
+    el.classList.remove('hover-active');
+    clearXmlHighlight();
+    hideDefTip();
+    if (activeTouchTreeLine === el) activeTouchTreeLine = null;
+  };
+
+  root.querySelectorAll('.tree-line').forEach(el => {
+    if (IS_TOUCH) {
+      el.addEventListener('click', () => {
+        const node = byNid.get(el.dataset.nid);
+        if (el.classList.contains('hover-active')) deactivateLine(el);
+        else activateLine(el, node);
+      });
+    } else {
+      el.addEventListener('mouseenter', () => {
+        el.classList.add('hover-active');
+        highlightXmlNode(el.dataset.nid);
+        const node = byNid.get(el.dataset.nid);
+        clearTimeout(tipHoverTimer);
+        tipHoverTimer = setTimeout(() => showDefTip(node, el), 280);
+      });
+      el.addEventListener('mouseleave', () => {
+        el.classList.remove('hover-active');
+        clearXmlHighlight();
+        hideDefTip();
+      });
+    }
+  });
+}
+
+/* ---------- Render: SVG illustration ---------- */
+/* ---------- View state shared by 2D and 3D renderers ---------- */
+let viewMode     = '2d';  // '3d' or '2d'
+let viewRotation = -15;   // degrees, around vertical axis (3D only)
+let viewZoom     = 1;     // zoom (3D only)
+let selectedPart = null;  // id of selected component slot (string)
+
+/* ---------- Isometric 3D renderer ----------
+   Reads live X/Y/Z/B/C positions from liveCache when Play is on, falls back
+   to procedural motion otherwise. The Mazak digital twin at
+   demo.mtconnect.org/twin would load OBJ solid models for these
+   sub-assemblies, but at time of writing the public upstream returns 503 on
+   /twin/objs/* — so this renderer uses procedural geometry that follows the
+   same axis-to-DataItem mapping the twin uses (Xabs, Yabs, Zabs, Babs, Cabs).
+------------------------------------------------------------------------- */
+function liveAxisValue(mazakId, fallback) {
+  const hit = liveCache[mazakId];
+  if (!hit) return fallback;
+  const n = parseFloat(hit.v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function render3D() {
+  const has  = key => machine.some(s => s.key === key);
+  const slotOf = key => machine.find(s => s.key === key);
+
+  const rad = viewRotation * Math.PI / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const ISO = Math.cos(Math.PI/6), VER = Math.sin(Math.PI/6);
+  const project = (x,y,z) => {
+    const xp = x*cos + z*sin;
+    const zp = -x*sin + z*cos;
+    return { sx: (xp - zp) * ISO * viewZoom, sy: (-y + (xp + zp) * VER) * viewZoom };
+  };
+  function box(cx, cy, cz, sx, sy, sz, fill='#22304f', stroke='#3a4a78', extraClass='') {
+    const c = [];
+    for (let dx of [-1,1]) for (let dy of [-1,1]) for (let dz of [-1,1])
+      c.push(project(cx + dx*sx/2, cy + dy*sy/2, cz + dz*sz/2));
+    const face = pts => `<polygon class="body-face ${extraClass}" points="${pts.map(p => p.sx+','+p.sy).join(' ')}" fill="${fill}" stroke="${stroke}" stroke-width="1"/>`;
+    return [ face([c[2],c[3],c[7],c[6]]), face([c[1],c[3],c[7],c[5]]), face([c[4],c[5],c[7],c[6]]) ].join('');
+  }
+  function clickable(slotId, body) {
+    const selStyle = selectedPart === slotId ? 'filter:drop-shadow(0 0 8px var(--accent))' : '';
+    return `<g class="iso-clickable" data-slot="${slotId}" style="${selStyle}">${body}</g>`;
+  }
+
+  const t = tick / 2;
+  // Scale live mm/degree values into the SVG's local coordinate space.
+  const xMm = liveAxisValue('Xabs', 70 * Math.sin(t * 0.7));
+  const yMm = liveAxisValue('Yabs', 32 * Math.sin(t * 0.5));
+  const zMm = liveAxisValue('Zabs', 30 + 30 * Math.sin(t * 0.9));
+  const bDeg = liveAxisValue('Babs', 0);
+  // Mazak X range is roughly ±400mm; squash into the SVG's ±70 range
+  const xMap = Math.max(-70, Math.min(70, xMm * 0.18));
+  const yMap = Math.max(-32, Math.min(32, yMm * 0.18));
+  const zMap = Math.max(-30, Math.min(80, 30 + zMm * 0.18));
+
+  let out = '';
+  out += box(0, -60, 0, 220, 14, 130, '#1c2540', '#2c3a60');
+  out += box(0, -52, 0, 180, 4, 110, '#22304f', '#3a4a78');
+
+  if (has('linear-x')) {
+    const sx = slotOf('linear-x');
+    out += box(0, -42, 0, 200, 6, 8, '#22304f', '#3a4a78');
+    out += clickable(sx.slotId, box(xMap, -32, 0, 36, 14, 22, '#5ad1ff', '#3a8eb0'));
+  }
+  if (has('linear-y')) {
+    const sy = slotOf('linear-y');
+    out += box(0, -36, 0, 90, 6, 90, '#22304f', '#3a4a78');
+    out += clickable(sy.slotId, box(0, -28, yMap, 50, 10, 18, '#9b8aff', '#6e5aad'));
+  }
+  if (has('linear-z')) {
+    const sz = slotOf('linear-z');
+    out += box(95, 30, 0, 18, 130, 26, '#22304f', '#3a4a78');
+    out += clickable(sz.slotId, box(95, zMap, 0, 30, 16, 32, '#ffc46b', '#a07a3e'));
+  }
+  if (has('rotary-c2')) {
+    const sr = slotOf('rotary-c2');
+    const zPos = has('linear-z') ? zMap : 0;
+    out += clickable(sr.slotId, box(95, zPos-14, 0, 12, 8, 12, '#384c7a', '#1c2540'));
+    const p = project(95, zPos-22, 0);
+    // Spindle spins at the live RPM if Play is on; otherwise a friendly idle spin.
+    const rpm = liveAxisValue('Srpm', 600);
+    const ang = (tick * Math.max(6, rpm / 50)) % 360;
+    out += `<g transform="translate(${p.sx},${p.sy}) rotate(${ang})">
+      <circle r="${10*viewZoom}" fill="#1c2540" stroke="#ff8a3d" stroke-width="${1.5*viewZoom}"/>
+      <line x1="${-7*viewZoom}" y1="0" x2="${7*viewZoom}" y2="0" stroke="#ff8a3d" stroke-width="${2*viewZoom}"/>
+      <line x1="0" y1="${-7*viewZoom}" x2="0" y2="${7*viewZoom}" stroke="#ff8a3d" stroke-width="${2*viewZoom}"/>
+    </g>`;
+  }
+  if (has('controller')) {
+    const sc = slotOf('controller');
+    const p = project(-120, 0, -30);
+    const exec = ((tick >> 3) % 4 === 1) ? 'READY' : 'ACTIVE';
+    const ledColor = exec === 'ACTIVE' ? '#4ade80' : '#5ad1ff';
+    out += clickable(sc.slotId,
+      `<rect x="${p.sx-24}" y="${p.sy-20}" width="${48*viewZoom}" height="${40*viewZoom}" rx="3" fill="#1c2540" stroke="#5ad1ff" stroke-width="${1.5*viewZoom}"/>
+       <circle cx="${p.sx-14*viewZoom}" cy="${p.sy-9*viewZoom}" r="${4*viewZoom}" fill="${ledColor}"/>
+       <text x="${p.sx-6*viewZoom}" y="${p.sy-6*viewZoom}" fill="#5ad1ff" font-family="ui-monospace,monospace" font-size="${8*viewZoom}">CTRL</text>
+       <text x="${p.sx-18*viewZoom}" y="${p.sy+8*viewZoom}" fill="#e6edf7" font-family="ui-monospace,monospace" font-size="${9*viewZoom}">${exec}</text>`
+    );
+  }
+  if (has('coolant')) {
+    const sc = slotOf('coolant');
+    const p = project(-70, -10, 50);
+    const dripY = (tick * 4) % 30;
+    out += clickable(sc.slotId,
+      `<rect x="${p.sx-14}" y="${p.sy-16}" width="${28*viewZoom}" height="${28*viewZoom}" rx="3" fill="#1c2540" stroke="#5ad1ff" stroke-width="${1.5*viewZoom}"/>
+       <text x="${p.sx}" y="${p.sy+4*viewZoom}" text-anchor="middle" font-family="ui-monospace,monospace" font-size="${10*viewZoom}" fill="#5ad1ff">C</text>
+       <circle cx="${p.sx}" cy="${p.sy+18+dripY*viewZoom}" r="${2.5*viewZoom}" fill="#5ad1ff" opacity="${1-dripY/30}"/>`
+    );
+  }
+  if (has('electric')) {
+    const se = slotOf('electric');
+    const p = project(-20, -10, 55);
+    out += clickable(se.slotId,
+      `<rect x="${p.sx-14}" y="${p.sy-16}" width="${28*viewZoom}" height="${28*viewZoom}" rx="3" fill="#1c2540" stroke="#facc15" stroke-width="${1.5*viewZoom}"/>
+       <path d="M${p.sx-3*viewZoom},${p.sy-10*viewZoom} l${-6*viewZoom},${14*viewZoom} l${6*viewZoom},0 l${-2*viewZoom},${8*viewZoom} l${8*viewZoom},${-14*viewZoom} l${-6*viewZoom},0 z" fill="#facc15"/>`
+    );
+  }
+  if (has('environmental')) {
+    const st = slotOf('environmental');
+    const p = project(120, -10, 30);
+    const lvl = 0.5 + 0.4 * Math.sin(t * 0.2);
+    out += clickable(st.slotId,
+      `<rect x="${p.sx-6}" y="${p.sy-20}" width="${12*viewZoom}" height="${40*viewZoom}" rx="${6*viewZoom}" fill="#1c2540" stroke="#f87171" stroke-width="${1.5*viewZoom}"/>
+       <rect x="${p.sx-4*viewZoom}" y="${p.sy-20+(1-lvl)*30*viewZoom}" width="${8*viewZoom}" height="${(8+lvl*22)*viewZoom}" rx="${4*viewZoom}" fill="#f87171" opacity="0.7"/>
+       <circle cx="${p.sx}" cy="${p.sy+22*viewZoom}" r="${6*viewZoom}" fill="#f87171"/>`
+    );
+  }
+  if (has('rotary-b')) {
+    const sb = slotOf('rotary-b');
+    const p = project(40, -36, 40);
+    const ang = (tick * 12 + 30) % 360;
+    out += clickable(sb.slotId,
+      `<g transform="translate(${p.sx},${p.sy}) rotate(${ang})">
+        <circle r="${9*viewZoom}" fill="#1c2540" stroke="#c0a6f0" stroke-width="${1.5*viewZoom}"/>
+        <path d="M${-6*viewZoom} 0 A ${6*viewZoom} ${6*viewZoom} 0 0 1 ${6*viewZoom} 0" stroke="#c0a6f0" stroke-width="${1.5*viewZoom}" fill="none"/>
+       </g>`
+    );
+  }
+  return out;
+}
+
+/* ---------- Flat 2D renderer (orthographic front view) ---------- */
+function render2D() {
+  const has    = key => machine.some(s => s.key === key);
+  const slotOf = key => machine.find(s => s.key === key);
+  const wrap = (slotId, body) => {
+    const sel = selectedPart === slotId ? 'filter:drop-shadow(0 0 8px var(--accent))' : '';
+    return `<g class="iso-clickable" data-slot="${slotId}" style="${sel}">${body}</g>`;
+  };
+  const t = tick / 2;
+  let out = '';
+
+  // Base / frame
+  out += `<rect x="80" y="280" width="440" height="40" rx="6" fill="#1c2540" stroke="#2c3a60" stroke-width="2"/>
+          <rect x="120" y="270" width="360" height="14" rx="3" fill="#22304f" stroke="#3a4a78" stroke-width="1.5"/>
+          <text x="300" y="310" text-anchor="middle" fill="#8a97b1" font-size="11" font-family="ui-monospace,monospace">Base / Frame</text>`;
+
+  // X gantry rail + carriage
+  if (has('linear-x')) {
+    const sx = slotOf('linear-x');
+    const xC = 280 + 80 * Math.sin(t * 0.7);
+    out += wrap(sx.slotId, `
+      <line x1="100" y1="200" x2="500" y2="200" stroke="#3a4a78" stroke-width="3" stroke-linecap="round"/>
+      <rect x="${xC}" y="190" width="60" height="20" rx="3" fill="#5ad1ff" opacity="0.85"/>
+      <text x="${xC+30}" y="184" text-anchor="middle" fill="#5ad1ff" font-size="10" font-family="ui-monospace,monospace">X</text>`);
+  }
+
+  // Y rail (dashed depth indicator)
+  if (has('linear-y')) {
+    const sy = slotOf('linear-y');
+    const yC = 290 + 60 * Math.sin(t * 0.5);
+    out += wrap(sy.slotId, `
+      <line x1="120" y1="240" x2="480" y2="240" stroke="#3a4a78" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
+      <rect x="${yC}" y="232" width="40" height="14" rx="2" fill="#9b8aff" opacity="0.85"/>
+      <text x="475" y="244" fill="#9b8aff" font-size="10" font-family="ui-monospace,monospace">Y</text>`);
+  }
+
+  // Z column + carriage
+  if (has('linear-z')) {
+    const sz = slotOf('linear-z');
+    const zC = 120 + 30 * Math.sin(t * 0.9);
+    out += wrap(sz.slotId, `
+      <line x1="305" y1="60" x2="305" y2="200" stroke="#3a4a78" stroke-width="3" stroke-linecap="round"/>
+      <rect x="290" y="${zC}" width="32" height="36" rx="3" fill="#ffc46b" opacity="0.85"/>
+      <text x="320" y="80" fill="#ffc46b" font-size="10" font-family="ui-monospace,monospace">Z</text>`);
+  }
+
+  // Spindle (Rotary C2 — Mazak's spindle)
+  if (has('rotary-c2')) {
+    const sr = slotOf('rotary-c2');
+    out += wrap(sr.slotId, `
+      <rect x="298" y="156" width="16" height="14" fill="#384c7a"/>
+      <g transform="translate(306,180)">
+        <circle r="14" fill="#1c2540" stroke="#ff8a3d" stroke-width="2"/>
+        <g class="spin2d">
+          <line x1="-10" y1="0" x2="10" y2="0" stroke="#ff8a3d" stroke-width="2"/>
+          <line x1="0" y1="-10" x2="0" y2="10" stroke="#ff8a3d" stroke-width="2"/>
+        </g>
+      </g>`);
+  }
+
+  // Coolant nozzle + drip
+  if (has('coolant')) {
+    const sc = slotOf('coolant');
+    const dripY = (tick * 4) % 60;
+    out += wrap(sc.slotId, `
+      <path d="M250 160 q 6 -8 16 -2" fill="none" stroke="#5ad1ff" stroke-width="2"/>
+      <circle cx="266" cy="${170 + dripY}" r="3" fill="#5ad1ff" opacity="${(1 - dripY/60).toFixed(2)}"/>`);
+  }
+
+  // Electric power badge
+  if (has('electric')) {
+    const se = slotOf('electric');
+    out += wrap(se.slotId, `
+      <g transform="translate(100,90)">
+        <rect width="40" height="50" rx="4" fill="#1c2540" stroke="#facc15" stroke-width="1.5"/>
+        <path d="M22 6l-12 24h12l-4 16 14-24h-12z" fill="#facc15"/>
+        <text x="20" y="60" text-anchor="middle" fill="#facc15" font-size="9" font-family="ui-monospace,monospace">PWR</text>
+      </g>`);
+  }
+
+  // Environmental sensor (room temperature)
+  if (has('environmental')) {
+    const st = slotOf('environmental');
+    const lvl = 0.5 + 0.4 * Math.sin(t * 0.2);
+    out += wrap(st.slotId, `
+      <g transform="translate(470,140)">
+        <rect width="18" height="60" rx="9" fill="#1c2540" stroke="#f87171" stroke-width="1.5"/>
+        <rect x="3" y="${20 + (1-lvl)*24}" width="12" height="${12 + lvl*24}" rx="6" fill="#f87171" opacity="0.7"/>
+        <circle cx="9" cy="60" r="9" fill="#f87171"/>
+        <text x="9" y="-4" text-anchor="middle" fill="#f87171" font-size="9" font-family="ui-monospace,monospace">T</text>
+      </g>`);
+  }
+
+  // Rotary B (trunnion)
+  if (has('rotary-b')) {
+    const sb = slotOf('rotary-b');
+    const ang = (tick * 12 + 30) % 360;
+    out += wrap(sb.slotId, `
+      <g transform="translate(380,260) rotate(${ang})">
+        <circle r="14" fill="#1c2540" stroke="#c0a6f0" stroke-width="2"/>
+        <path d="M-10 0 A 10 10 0 0 1 10 0" stroke="#c0a6f0" stroke-width="2" fill="none"/>
+        <text y="-20" text-anchor="middle" fill="#c0a6f0" font-size="9" font-family="ui-monospace,monospace">B</text>
+      </g>`);
+  }
+
+  // Controller indicator
+  if (has('controller')) {
+    const sc = slotOf('controller');
+    const exec = ((tick >> 3) % 4 === 1) ? 'READY' : 'ACTIVE';
+    const ledColor = exec === 'ACTIVE' ? '#4ade80' : '#5ad1ff';
+    out += wrap(sc.slotId, `
+      <g transform="translate(40,40)">
+        <rect width="80" height="34" rx="4" fill="#1c2540" stroke="#5ad1ff" stroke-width="1.5"/>
+        <circle cx="14" cy="17" r="5" fill="${ledColor}"/>
+        <text x="26" y="14" fill="#5ad1ff" font-size="9" font-family="ui-monospace,monospace">CONTROLLER</text>
+        <text x="26" y="26" fill="#e6edf7" font-size="10" font-family="ui-monospace,monospace">${exec}</text>
+      </g>`);
+  }
+
+  return out;
+}
+
+/* ---------- Dispatcher ---------- */
+function rerenderSvg() {
+  const wrap = $('#stageWrap');
+  wrap.classList.toggle('has-parts', machine.length > 0);
+
+  const svg = $('#machineSvg');
+  // Switch viewBox + visibility of 3D-only controls based on mode
+  if (viewMode === '2d') {
+    svg.setAttribute('viewBox', '0 0 600 360');
+    $('#viewControls').style.display = 'none';
+  } else {
+    svg.setAttribute('viewBox', '-320 -220 640 440');
+    $('#viewControls').style.display = '';
+  }
+
+  if (machine.length === 0) { svg.innerHTML = ''; return; }
+  svg.innerHTML = (viewMode === '2d') ? render2D() : render3D();
+
+  svg.querySelectorAll('[data-slot]').forEach(el => el.addEventListener('click', () => {
+    const sid = Number(el.dataset.slot);
+    selectedPart = (selectedPart === sid) ? null : sid;
+    rerenderSvg();
+  }));
+}
+
+/* ---------- Render: Devices.xml ---------- */
+function buildXml() {
+  if (machine.length === 0) {
+    return `<span class="comment">&lt;!-- Click "Device" on the left to create the document root. Until a Device exists, the response body has nothing to wrap. --&gt;</span>`;
+  }
+  if (!hasDevice()) {
+    return `<span class="comment">&lt;!-- The MTConnect document needs a Device root. Click "Device" on the left first. --&gt;</span>`;
+  }
+  const indent = n => '  '.repeat(n);
+
+  // Each renderable element is wrapped in <span class="xn" data-nid="...">
+  // so the tree-view's hover-handler can find and highlight it. The wrapping
+  // span surrounds the open tag, body, and close tag — so highlighting a
+  // parent visually colours all descendants too.
+  const wrap = (nid, content) => `<span class="xn" data-nid="${nid}">${content}</span>`;
+
+  const renderDataItem = (di, depth) => wrap('di:' + di.id,
+    `${indent(depth)}<span class="tag">&lt;DataItem</span> ` +
+      `<span class="attr">id</span>=<span class="string">"${di.id}"</span> ` +
+      `<span class="attr">type</span>=<span class="string">"${di.type}"</span> ` +
+      `<span class="attr">category</span>=<span class="string">"${di.category}"</span>` +
+      (di.subType ? ` <span class="attr">subType</span>=<span class="string">"${di.subType}"</span>` : '') +
+      (di.units   ? ` <span class="attr">units</span>=<span class="string">"${di.units}"</span>` : '') +
+    `<span class="tag">/&gt;</span>`);
+
+  // Component body: DataItems block (if any) + nested Components block (if any).
+  // parentNidForChild is used to compute nested children's nid in the same
+  // scheme the tree uses ('sub:parentNid:childId') so hover-highlight matches.
+  const renderComponentBody = (c, depth, parentNid) => {
+    let out = '';
+    if (c.dataItems && c.dataItems.length) {
+      out += `${indent(depth)}<span class="tag">&lt;DataItems&gt;</span>\n`;
+      c.dataItems.forEach(di => out += renderDataItem(di, depth+1) + '\n');
+      out += `${indent(depth)}<span class="tag">&lt;/DataItems&gt;</span>\n`;
+    }
+    if (c.children && c.children.length) {
+      out += `${indent(depth)}<span class="tag">&lt;Components&gt;</span>\n`;
+      c.children.forEach(ch => {
+        const childNid = parentNid + '>' + ch.id;   // matches buildNodeTree's sub: nid scheme
+        out += wrap(childNid,
+          `${indent(depth+1)}<span class="tag">&lt;${ch.kind}</span> <span class="attr">id</span>=<span class="string">"${ch.id}"</span><span class="tag">&gt;</span>\n` +
+          renderComponentBody(ch, depth+2, childNid) +
+          `${indent(depth+1)}<span class="tag">&lt;/${ch.kind}&gt;</span>\n`
+        );
+      });
+      out += `${indent(depth)}<span class="tag">&lt;/Components&gt;</span>\n`;
+    }
+    return out;
+  };
+
+  // gather sections (matches the real backend mill's Components wrapper layout)
+  const deviceSlot = machine.find(s => s.key === 'device');
+  const deviceDef  = resolveSlot(deviceSlot);
+  const axes  = machine.filter(s => ['Linear','Rotary'].includes(resolveSlot(s).kind));
+  const ctrl  = machine.filter(s => resolveSlot(s).kind === 'Controller');
+  const sys   = machine.filter(s => resolveSlot(s).parentKind === 'Systems');
+  const aux   = machine.filter(s => resolveSlot(s).parentKind === 'Auxiliaries');
+  const parts = machine.filter(s => resolveSlot(s).kind === 'Parts');
+  const res   = machine.filter(s => resolveSlot(s).kind === 'Resources');
+  const devLevel = machine.filter(s => s.key !== 'device' && resolveSlot(s).parentKind === 'Device');
+
+  // Render one top-level slot, wrapped in its xn span keyed by slotId.
+  const renderSlot = (slot, depth) => {
+    const c = resolveSlot(slot);
+    const slotNid = 'comp:' + slot.slotId;
+    return wrap(slotNid,
+      `${indent(depth)}<span class="tag">&lt;${c.kind}</span> <span class="attr">id</span>=<span class="string">"${c.id}"</span> <span class="attr">name</span>=<span class="string">"${c.name}"</span><span class="tag">&gt;</span>\n` +
+      renderComponentBody(c, depth+1, slotNid) +
+      `${indent(depth)}<span class="tag">&lt;/${c.kind}&gt;</span>\n`
+    );
+  };
+
+  // Implicit organizer wrappers (Axes/Systems/Auxiliaries): emit with id+name
+  // and wrap children in their own <Components> block, per MTConnect schema.
+  const renderOrganizer = (tag, items, depth) => {
+    if (!items.length) return '';
+    const meta = ORGANIZER_META[tag];
+    let inner = `${indent(depth)}<span class="tag">&lt;${tag}</span> <span class="attr">id</span>=<span class="string">"${meta.id}"</span> <span class="attr">name</span>=<span class="string">"${meta.name}"</span><span class="tag">&gt;</span>\n`;
+    inner += `${indent(depth+1)}<span class="tag">&lt;Components&gt;</span>\n`;
+    items.forEach(s => inner += renderSlot(s, depth+2));
+    inner += `${indent(depth+1)}<span class="tag">&lt;/Components&gt;</span>\n`;
+    inner += `${indent(depth)}<span class="tag">&lt;/${tag}&gt;</span>\n`;
+    return wrap('org:' + tag, inner);
+  };
+
+  // Self-organizers (Controller / Parts / Resources): the slot's own component
+  // entry already IS the organizer — render it directly, no extra wrapping.
+  const renderDirect = (items, depth) =>
+    items.map(s => renderSlot(s, depth)).join('');
+
+  // Are there any actual child components to emit?
+  const hasAnyComponents = axes.length || ctrl.length || sys.length || aux.length || parts.length || res.length;
+
+  let xml = '';
+  xml += `<span class="comment">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>\n`;
+  xml += `<span class="tag">&lt;MTConnectDevices</span> <span class="attr">xmlns</span>=<span class="string">"urn:mtconnect.org:MTConnectDevices:2.7"</span><span class="tag">&gt;</span>\n`;
+  xml += `  <span class="tag">&lt;Header</span> <span class="attr">creationTime</span>=<span class="string">"${new Date().toISOString()}"</span> <span class="attr">sender</span>=<span class="string">"playground"</span> <span class="attr">version</span>=<span class="string">"2.7"</span><span class="tag">/&gt;</span>\n`;
+  xml += `  <span class="tag">&lt;Devices&gt;</span>\n`;
+
+  // The entire Device element gets wrapped — hovering the Device tree row
+  // highlights everything inside the device file.
+  let deviceInner = `    <span class="tag">&lt;Device</span> <span class="attr">id</span>=<span class="string">"${deviceDef.id || 'd1'}"</span> <span class="attr">name</span>=<span class="string">"${deviceDef.name || 'MyCNC'}"</span> <span class="attr">uuid</span>=<span class="string">"${deviceDef.name || 'MyCNC'}"</span><span class="tag">&gt;</span>\n`;
+
+  // Device-level DataItems block: Device's own DIs first, then each extra slot
+  // wrapped in its own comp:<slotId> span so the tree's virtual group node
+  // highlights all of its DIs as one block.
+  if ((deviceDef.dataItems && deviceDef.dataItems.length) || devLevel.length) {
+    deviceInner += `      <span class="tag">&lt;DataItems&gt;</span>\n`;
+    (deviceDef.dataItems || []).forEach(di => {
+      deviceInner += '        ' + renderDataItem(di, 0).replace(/^[ ]+/,'') + '\n';
+    });
+    devLevel.forEach(s => {
+      const slotNid = 'comp:' + s.slotId;
+      const inner = (resolveSlot(s).dataItems || [])
+        .map(di => '        ' + renderDataItem(di, 0).replace(/^[ ]+/,'')).join('\n');
+      deviceInner += wrap(slotNid, inner) + '\n';
+    });
+    deviceInner += `      <span class="tag">&lt;/DataItems&gt;</span>\n`;
+  }
+  if (hasAnyComponents) {
+    deviceInner += `      <span class="tag">&lt;Components&gt;</span>\n`;
+    deviceInner += renderOrganizer('Axes',        axes,  4);
+    deviceInner += renderDirect(ctrl, 4);                       // Controller is its own component
+    deviceInner += renderOrganizer('Systems',     sys,   4);
+    deviceInner += renderOrganizer('Auxiliaries', aux,   4);
+    deviceInner += renderDirect(parts, 4);                      // Parts is a self-organizer
+    deviceInner += renderDirect(res, 4);                        // Resources is a self-organizer
+    deviceInner += `      <span class="tag">&lt;/Components&gt;</span>\n`;
+  }
+  deviceInner += `    <span class="tag">&lt;/Device&gt;</span>\n`;
+  xml += wrap('dev', deviceInner);
+
+  xml += `  <span class="tag">&lt;/Devices&gt;</span>\n`;
+  xml += `<span class="tag">&lt;/MTConnectDevices&gt;</span>`;
+  return xml;
+}
+
+function rerenderXml() {
+  $('#xmlPane').innerHTML = buildXml();
+}
+
+/* ---------- Live telemetry — pulls REAL data from demo.mtconnect.org ----------
+   Cache shape:
+     liveCache[mazakId] = { v: '...', cat: 'sample'|'event'|'condition normal|warning|fault', ts: 'ISO' }
+   `tick` continues to drive purely-visual animations (spindle spin, etc) when
+   no real value is in cache for a given mazakId.
+-------------------------------------------------------------------------------- */
+const AGENT_BASE = 'https://demo.mtconnect.org';
+const AGENT_DEVICE = 'Mazak';
+let liveCache = {};         // mazakId -> { v, cat, ts }
+let lastSequence = null;    // sample cursor
+let polling = false;
+let pollHandle = null;
+let pollGen = 0;            // generation counter to abort stale loops
+let shdrTranscript = [];    // array of SHDR-format lines collected while Play is on
+let startedAt = null;
+
+let tick = 0;
+
+function flatDataItems() {
+  // produce a flat list of every DataItem currently in the machine, in order
+  const items = [];
+  machine.forEach(slot => {
+    const c = resolveSlot(slot);
+    const collect = (comp, prefix) => {
+      (comp.dataItems || []).forEach(di => {
+        items.push({ ...di, label: `${prefix}.${di.type}${di.subType ? '.'+di.subType : ''}` });
+      });
+      (comp.children || []).forEach(ch => collect(ch, `${prefix}.${ch.kind}`));
+    };
+    const root = (c.kind === 'Linear' || c.kind === 'Rotary') ? `${c.kind}[${c.name}]`
+              : (c.parentKind === 'Device' ? 'Device' : c.kind);
+    collect(c, root);
+  });
+  return items;
+}
+
+function liveValue(di) {
+  // Use the real cached value if we have one; otherwise fall back to a tasteful idle placeholder.
+  const hit = di.mazakId && liveCache[di.mazakId];
+  if (hit) {
+    const v = hit.v;
+    if (di.category === 'CONDITION') {
+      const k = (v || '').toString().toLowerCase();
+      const grade = k.includes('fault') ? 'fault' : k.includes('warn') ? 'warning' : 'normal';
+      return { v: v || 'NORMAL', cat: 'condition ' + grade, ts: hit.ts };
+    }
+    if (di.category === 'EVENT')  return { v: v || 'UNAVAILABLE', cat: 'event', ts: hit.ts };
+    return { v: di.units ? `${v} ${unitLabel(di.units)}` : v, cat: 'sample', ts: hit.ts };
+  }
+  // No cached value yet — show '—' if connected, otherwise show 'idle'
+  if (polling) return { v: 'awaiting…', cat: 'event' };
+  return { v: di.category === 'CONDITION' ? 'NORMAL' : '—', cat: di.category === 'CONDITION' ? 'condition normal' : 'event' };
+}
+
+function unitLabel(u) {
+  return ({
+    'MILLIMETER': 'mm', 'CELSIUS': '°C', 'PERCENT': '%', 'PASCAL': 'Pa',
+    'MILLIMETER/SECOND': 'mm/s', 'REVOLUTION/MINUTE': 'rpm',
+    'DEGREE': '°', 'MILLIMETER_3D': 'mm', 'AMPERE': 'A', 'VOLT': 'V',
+    'NEWTON_METER': 'N·m', 'WATT': 'W', 'LITER/SECOND': 'L/s'
+  })[u] || u || '';
+}
+
+function rerenderStream() {
+  const pane = $('#streamList');
+  const items = flatDataItems();
+  $('#streamBadge').style.display = items.length ? '' : 'none';
+  $('#streamBadge').textContent = items.length;
+
+  // Tree fullness pill (left palette footer)
+  const fullEl = $('#treeFullness');
+  if (fullEl) {
+    const placed = machine.length;
+    fullEl.textContent = `${placed} / ${FULL_MAZAK_SLOTS}` + (placed === FULL_MAZAK_SLOTS ? ' (complete!)' : '');
+  }
+
+  if (items.length === 0) {
+    pane.innerHTML = `<div class="empty-stream">No DataItems yet. Add components on the left.</div>`;
+    return;
+  }
+  pane.innerHTML = items.map(di => {
+    const { v, cat, ts } = liveValue(di);
+    const mid = di.mazakId ? `<span style="color:#5a6783;font-family:var(--mono);font-size:10px;margin-left:4px">${di.mazakId}</span>` : '';
+    return `<div class="stream-row">
+      <span class="key"><span class="kname">${di.label}</span>${mid}<span class="ktype">${di.category||'EVENT'}</span></span>
+      <span class="val ${cat}" title="${ts || ''}">${v}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- Live polling against demo.mtconnect.org ---------- */
+function setConn(state, msg) {
+  const pulse = $('#connPulse'), status = $('#connStatus');
+  if (!pulse || !status) return;
+  status.textContent = msg;
+  if (state === 'live')        { pulse.style.background = 'var(--good)'; pulse.style.boxShadow = '0 0 10px var(--good)'; }
+  else if (state === 'connecting') { pulse.style.background = 'var(--warn)'; pulse.style.boxShadow = '0 0 10px var(--warn)'; }
+  else if (state === 'error')  { pulse.style.background = 'var(--bad)';  pulse.style.boxShadow = '0 0 10px var(--bad)'; }
+  else                          { pulse.style.background = 'var(--muted)'; pulse.style.boxShadow = 'none'; }
+}
+
+function parseMTConnectResponse(xmlText) {
+  // Parse a /current or /sample XML response. Returns { samples, events, conditions, nextSequence }
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const out = { samples: [], events: [], conditions: [], nextSequence: null };
+  const header = doc.getElementsByTagName('Header')[0];
+  if (header) out.nextSequence = header.getAttribute('nextSequence');
+  const grab = (tagName, into) => {
+    const nodes = doc.getElementsByTagName(tagName);
+    for (let i = 0; i < nodes.length; i++) {
+      const set = nodes[i];
+      for (const el of set.children) {
+        const id = el.getAttribute('dataItemId') || '';
+        const ts = el.getAttribute('timestamp') || '';
+        const seq = el.getAttribute('sequence') || '';
+        const value = el.textContent.trim();
+        into.push({ id, ts, seq, value, type: el.localName });
+      }
+    }
+  };
+  grab('Samples',    out.samples);
+  grab('Events',     out.events);
+  grab('Condition',  out.conditions);
+  return out;
+}
+
+function ingest(resp) {
+  // populate liveCache + append SHDR-formatted line to transcript
+  const all = [
+    ...resp.samples.map(o    => ({ ...o, kind: 'SAMPLE' })),
+    ...resp.events.map(o     => ({ ...o, kind: 'EVENT' })),
+    ...resp.conditions.map(o => ({ ...o, kind: 'CONDITION' }))
+  ];
+  for (const e of all) {
+    if (!e.id) continue;
+    liveCache[e.id] = { v: e.value, cat: e.kind.toLowerCase(), ts: e.ts };
+    // SHDR line format: timestamp|dataItemId|value
+    shdrTranscript.push(`${e.ts}|${e.id}|${e.value}`);
+  }
+}
+
+async function pollCurrent(gen) {
+  setConn('connecting', `Connecting to demo.mtconnect.org…`);
+  try {
+    const r = await fetch(`${AGENT_BASE}/${AGENT_DEVICE}/current`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const text = await r.text();
+    if (gen !== pollGen) return;
+    const parsed = parseMTConnectResponse(text);
+    ingest(parsed);
+    lastSequence = parsed.nextSequence;
+    setConn('live', `Live · streaming from demo.mtconnect.org`);
+    rerenderStream();
+    pollSampleLoop(gen);
+  } catch (e) {
+    setConn('error', `Failed to reach agent: ${e.message}. Will retry…`);
+    if (gen === pollGen) pollHandle = setTimeout(() => pollCurrent(gen), 2500);
+  }
+}
+
+async function pollSampleLoop(gen) {
+  /* Plain HTTP polling — NOT interval/heartbeat streaming mode.
+     The MTConnect /sample endpoint with `interval=` switches into a
+     multipart/x-mixed-replace stream that fetch().text() can't drain
+     properly; the call hangs until the heartbeat expires, which blocks
+     UI updates and starves the SHDR transcript of post-snapshot events.
+     Simple polling: ask for new events since lastSequence, sleep, repeat. */
+  while (gen === pollGen && polling) {
+    try {
+      const r = await fetch(`${AGENT_BASE}/${AGENT_DEVICE}/sample?from=${lastSequence}&count=500`);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const text = await r.text();
+      if (gen !== pollGen) return;
+      const parsed = parseMTConnectResponse(text);
+      ingest(parsed);
+      if (parsed.nextSequence) lastSequence = parsed.nextSequence;
+      $('#seqLabel').textContent = `seq=${lastSequence}  ·  ${shdrTranscript.length} events`;
+      rerenderStream();
+    } catch (e) {
+      setConn('error', `Sample loop hiccup: ${e.message}`);
+    }
+    // Pace the loop client-side — ~3 Hz keeps the UI fluid without
+    // hammering the public agent.
+    await new Promise(r => setTimeout(r, 333));
+  }
+}
+
+function startPolling() {
+  polling = true;
+  startedAt = new Date();
+  shdrTranscript = [];
+  liveCache = {};
+  pollGen++;
+  $('#btn-play').style.display = 'none';
+  $('#btn-stop').style.display = '';
+  $('#btn-stop-export').style.display = '';
+  pollCurrent(pollGen);
+}
+
+function stopPolling(exportFiles) {
+  polling = false;
+  pollGen++;
+  if (pollHandle) { clearTimeout(pollHandle); pollHandle = null; }
+  const elapsed = startedAt ? Math.round((Date.now() - startedAt) / 1000) : 0;
+  const note = exportFiles ? `Stopped and exported. Captured ${shdrTranscript.length} events over ${elapsed}s.`
+                           : `Stopped. Captured ${shdrTranscript.length} events over ${elapsed}s — press Play to resume or Stop & Export to download.`;
+  setConn('idle', note);
+  $('#btn-stop').style.display = 'none';
+  $('#btn-stop-export').style.display = 'none';
+  $('#btn-play').style.display = '';
+  $('#seqLabel').textContent = '';
+  if (exportFiles) {
+    downloadDevicesXml();
+    setTimeout(downloadShdr, 250);  // separate user-gesture tick for the 2nd download
+  }
+  rerenderStream();
+}
+
+function downloadBlob(text, name, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+function buildPlainXml() {
+  // Same as buildXml() but stripped of HTML colorization + hover-wrapping
+  // spans, and with HTML entities (&lt; &gt; &quot; &amp;) decoded back to
+  // their literal characters — used for the downloadable .xml file. Without
+  // the entity decode the file starts with "&lt;?xml" and no parser accepts it.
+  const colored = buildXml();
+  const stripped = colored
+    .replace(/<span class="xn" data-nid="[^"]*">/g, '')           // hover-target wrappers
+    .replace(/<span class="(?:tag|attr|string|comment)">/g, '')   // syntax colour spans
+    .replace(/<\/span>/g, '');
+  // Decode entities via a throwaway textarea — the browser handles all
+  // standard entities correctly, no manual ordering / edge-case worry.
+  const t = document.createElement('textarea');
+  t.innerHTML = stripped;
+  return t.value;
+}
+
+function downloadDevicesXml() {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  downloadBlob(buildPlainXml(), `MyCNC_devices_${ts}.xml`, 'application/xml');
+}
+
+function downloadShdr() {
+  if (!shdrTranscript.length) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const header = `# SHDR transcript captured from demo.mtconnect.org\n# Format: ISO_TIMESTAMP|dataItemId|value\n# ${shdrTranscript.length} records  ·  started ${startedAt.toISOString()}\n`;
+  downloadBlob(header + shdrTranscript.join('\n') + '\n', `MyCNC_shdr_${ts}.shdr`, 'text/plain');
+}
+
+/* ---------- Animate the SVG itself (spindle, gantry sliding, temp fill) ---------- */
+// rerenderSvg() fully rebuilds the isometric view on every tick, so a separate animation step isn't needed.
+function animateSvg() { rerenderSvg(); }
+
+/* ---------- Code snippet pane ---------- */
+function rerenderCode() {
+  const has = machine.length > 0;
+  $('#codePane').innerHTML = `
+    <div class="code-section">
+      <h3>Probe — the device file the agent serves</h3>
+      <pre><span class="c"># Returns the full Devices.xml for everything the agent hosts</span>
+curl <span class="s">"https://demo.mtconnect.org/probe"</span></pre>
+    </div>
+    <div class="code-section">
+      <h3>Current — snapshot every DataItem (Play uses this)</h3>
+      <pre><span class="c"># Latest value for every DataItem on the live machine</span>
+curl <span class="s">"https://demo.mtconnect.org/current"</span></pre>
+    </div>
+    <div class="code-section">
+      <h3>Sample — long-poll the stream (Play uses this too)</h3>
+      <pre><span class="c"># Continue from where /current's nextSequence pointer left off</span>
+curl <span class="s">"https://demo.mtconnect.org/sample?from=NEXT_SEQ&amp;count=200&amp;interval=500&amp;heartbeat=10000"</span></pre>
+    </div>
+    <div class="code-section">
+      <h3>What you've assembled so far</h3>
+      <pre>${has ? machine.map(s => { const c = resolveSlot(s); return `<span class="c">// </span>${c.kind} <span class="s">"${c.name}"</span>`; }).join('\n') : '<span class="c">// nothing yet — drag pieces from the left</span>'}</pre>
+    </div>
+    <div class="code-section">
+      <h3>Stop exports</h3>
+      <pre><span class="c"># Press ■ Stop to download:</span>
+<span class="c">#   MyCNC_devices_*.xml   — the device file you assembled (MTConnect 2.7)</span>
+<span class="c">#   MyCNC_shdr_*.shdr     — SHDR transcript of the live run, format ISO|id|value</span></pre>
+    </div>
+  `;
+}
+
+/* Toggle the disabled state of palette chips based on whether the Device
+   exists. Device chip itself becomes disabled once placed (it's a singleton). */
+function updatePaletteState() {
+  const dev = hasDevice();
+  document.querySelectorAll('.chip').forEach(chip => {
+    const key = chip.dataset.add;
+    const shouldDisable = (key === 'device') ? dev : !dev;
+    if (shouldDisable) chip.setAttribute('disabled', '');
+    else               chip.removeAttribute('disabled');
+  });
+}
+
+/* ---------- Master rerender ---------- */
+function rerender() {
+  rerenderTree();
+  rerenderSvg();
+  rerenderXml();
+  rerenderStream();
+  rerenderCode();
+  updatePaletteState();
+}
+
+/* ---------- Tab switching ---------- */
+$$('.tab').forEach(t => t.addEventListener('click', () => {
+  $$('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  const which = t.dataset.tab;
+  $('#xmlPane').style.display    = which === 'xml'    ? '' : 'none';
+  $('#streamPane').style.display = which === 'stream' ? '' : 'none';
+  $('#codePane').style.display   = which === 'code'   ? '' : 'none';
+}));
+
+/* ---------- Palette clicks ---------- */
+$$('.chip').forEach(chip => chip.addEventListener('click', () => {
+  addComponent(chip.dataset.add);
+  // On the stacked mobile layout, jump to the Machine pane so the tap has
+  // visible payoff instead of leaving the user staring at the same list.
+  if (IS_TOUCH && window.matchMedia('(max-width: 880px)').matches) setMobilePane('stage');
+}));
+
+/* ---------- Category dialog wiring ---------- */
+$('#catConfirm').addEventListener('click', confirmCategoryDialog);
+$('#catCancel').addEventListener('click', closeCategoryDialog);
+$('#catRemove').addEventListener('click', removeFromCategoryDialog);
+$('#catDialog').addEventListener('click', e => { if (e.target.id === 'catDialog') closeCategoryDialog(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#catDialog').style.display !== 'none') closeCategoryDialog();
+  if (e.key === 'Enter'  && $('#catDialog').style.display !== 'none' && !$('#catConfirm').disabled) confirmCategoryDialog();
+});
+
+/* ---------- Header buttons ---------- */
+$('#btn-reset').addEventListener('click', reset);
+$('#btn-load-starter').addEventListener('click', () => loadPreset('starter'));
+$('#btn-load-full').addEventListener('click',    () => loadPreset('full'));
+$('#btn-play').addEventListener('click', startPolling);
+$('#btn-stop').addEventListener('click', () => stopPolling(false));
+$('#btn-stop-export').addEventListener('click', () => stopPolling(true));
+
+/* ---------- 3D view controls ---------- */
+$('#rotL').addEventListener('click', () => { viewRotation -= 15; rerenderSvg(); });
+$('#rotR').addEventListener('click', () => { viewRotation += 15; rerenderSvg(); });
+$('#zoomI').addEventListener('click', () => { viewZoom = Math.min(2,   viewZoom + 0.15); rerenderSvg(); });
+$('#zoomO').addEventListener('click', () => { viewZoom = Math.max(0.5, viewZoom - 0.15); rerenderSvg(); });
+$('#resetView').addEventListener('click', () => { viewRotation = -15; viewZoom = 1; rerenderSvg(); });
+
+/* ---------- View mode tabs (2D / 3D) ---------- */
+document.querySelectorAll('.view-tabs button').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.view-tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  viewMode = btn.dataset.mode;
+  rerenderSvg();
+}));
+
+/* ---------- Touch: tap outside the tree dismisses the active highlight/tooltip ---------- */
+if (IS_TOUCH) {
+  document.addEventListener('click', e => {
+    if (!activeTouchTreeLine) return;
+    if (activeTouchTreeLine.contains(e.target)) return; // handled by the line's own click listener
+    activeTouchTreeLine.classList.remove('hover-active');
+    clearXmlHighlight();
+    hideDefTip();
+    activeTouchTreeLine = null;
+  });
+}
+
+/* ---------- Tiny toast ---------- */
+function flash(msg) {
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1c2540;border:1px solid #2c3a60;color:#e6edf7;padding:8px 14px;border-radius:6px;font-size:12px;z-index:99;opacity:0;transition:opacity .2s';
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.style.opacity = '1');
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 250); }, 1400);
+}
+
+/* ---------- Mobile tab bar: switch which pane is visible ---------- */
+/* On the desktop grid all three panes show at once; below the layout's
+   breakpoint only one does, and this bar picks which. */
+function setMobilePane(name) {
+  document.querySelectorAll('.mobile-tabs button').forEach(b => b.classList.toggle('active', b.dataset.pane === name));
+  document.querySelectorAll('main > .pane').forEach(p => p.classList.toggle('mobile-active', p.classList.contains(name)));
+}
+document.querySelectorAll('.mobile-tabs button').forEach(btn =>
+  btn.addEventListener('click', () => setMobilePane(btn.dataset.pane))
+);
+setMobilePane('palette'); // harmless no-op above the breakpoint; picks the starting screen below it
+
+/* ---------- Boot ---------- */
+rerender();
+setInterval(() => {
+  tick++;
+  if (machine.length) {
+    // While Play is on, the sample loop already pushes fresh values into the cache
+    // and re-renders the stream tab on each batch. The tick-based redraw here keeps
+    // the SVG animations (spindle spin, sliders) lively even between batches.
+    animateSvg();
+    if (!polling) rerenderStream();
+  }
+}, 500);
+
+</script>
+
+</body>
+</html>
