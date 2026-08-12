@@ -2,7 +2,7 @@ export const ABOUT_INTRO = {
   eyebrow: "About Us",
   title: "The MTConnect Institute",
   body:
-    "The MTConnect Institute is a 501(c)(6) not-for-profit standards development organization for the MTConnect standard (ANSI/MTC2.5-2018). Its membership is made up of over 400 companies and research organizations in discrete manufacturing including automotive, aerospace, medical, and other industries as well as software developers, system integrators, and research organizations supporting those industries. Membership is free and open to anyone with a stake in MTConnect.",
+    "The MTConnect Institute is a 501(c)(6) not-for-profit standards development organization for the MTConnect standard (ANSI/MTC1.4-2018). Its membership is made up of over 400 companies and research organizations in discrete manufacturing including automotive, aerospace, medical, and other industries as well as software developers, system integrators, and research organizations supporting those industries. Membership is free and open to anyone with a stake in MTConnect.",
 };
 
 export const ORG_GROUPS = [
@@ -25,7 +25,7 @@ export const ORG_GROUPS = [
 
 export const STANDARD_BLURB = {
   title: "The MTConnect standard",
-  body: "The MTConnect standard (ANSI/MTC2.5-2018) offers a semantic vocabulary for manufacturing equipment to provide structured, contextualized data with no proprietary format.",
+  body: "The MTConnect standard (ANSI/MTC1.4-2018) offers a semantic vocabulary for manufacturing equipment to provide structured, contextualized data with no proprietary format.",
 };
 
 export const ABOUT_FAQS = [

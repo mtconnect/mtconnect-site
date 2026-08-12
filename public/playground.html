@@ -96,6 +96,30 @@
   .view-tabs button{background:transparent;color:var(--muted);border:none;padding:5px 12px;cursor:pointer;border-radius:5px;font-weight:600;letter-spacing:0.4px;font-family:inherit}
   .view-tabs button.active{background:var(--accent);color:#0b0f17}
   .view-tabs button:not(.active):hover{color:var(--text)}
+  /* 3D twin — inline Three.js scene, sits on top of the SVG stage when the
+     3D tab is active. Lazy-initialized on first activation. */
+  #stageTwin{position:absolute;inset:0;display:none;z-index:1;background:var(--bg)}
+  #stage3D{position:absolute;inset:0}
+  #stage3D canvas{display:block}
+  #twinReadout{position:absolute;left:14px;bottom:14px;z-index:5;background:rgba(18,24,38,.82);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:12px;line-height:1.7;min-width:150px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  #twinReadout h4{margin:0 0 6px;font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  #twinReadout .k{color:var(--muted)} #twinReadout .v{color:var(--accent)}
+  #twinHint{position:absolute;right:14px;bottom:14px;z-index:5;color:var(--muted);font-size:11px}
+  #twinMsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:4;color:var(--muted);font-size:14px;text-align:center;padding:24px}
+  #twinPresets{position:absolute;right:14px;top:14px;z-index:5;display:flex;gap:0;background:rgba(11,15,23,0.7);border:1px solid var(--border);border-radius:8px;padding:3px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-family:var(--mono);font-size:11px}
+  #twinPresets button{background:transparent;color:var(--muted);border:none;padding:5px 10px;cursor:pointer;border-radius:5px;font-weight:600;letter-spacing:0.4px;font-family:inherit}
+  #twinPresets button.active{background:var(--accent);color:#0b0f17}
+  #twinPresets button:not(.active):hover{color:var(--text)}
+  /* Non-axis component symbols along the bottom + a small note explaining
+     that only axes are visualized in the 3D scene. */
+  #twinComps{position:absolute;left:14px;right:14px;bottom:14px;z-index:5;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(11,15,23,0.72);border:1px solid var(--border);border-radius:10px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  #twinComps .compIcons{display:flex;gap:4px;flex-wrap:wrap}
+  #twinComps .compIcon{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2)}
+  #twinComps .compIcon svg{width:16px;height:16px;display:block}
+  #twinComps .compNote{margin-left:auto;color:var(--muted);font-size:10.5px;font-style:italic}
+  /* Bottom overlays lift above the component bar when it's visible so nothing overlaps */
+  #stageTwin.has-comps #twinHint,
+  #stageTwin.has-comps #twinReadout{bottom:56px}
 
   /* Spin via attribute-driven rotation in 2D mode */
   @keyframes spindleSpin2D { to { transform: rotate(360deg); } }
@@ -470,9 +494,25 @@
     <div class="stage-svg-wrap" id="stageWrap">
       <div class="empty-hint">Click a component on the left to start building.<br/>Try a preset above for a quick start.</div>
       <svg id="machineSvg" class="machine" viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="stageTwin">
+        <div id="stage3D"></div>
+        <div id="twinPresets">
+          <button data-view="iso" class="active">ISO</button>
+          <button data-view="front">Front</button>
+          <button data-view="side">Side</button>
+          <button data-view="top">Top</button>
+        </div>
+        <div id="twinReadout"><h4 id="twinRLabel">Device</h4><div id="twinRVals"></div></div>
+        <div id="twinComps" style="display:none">
+          <div class="compIcons" id="twinCompIcons"></div>
+          <div class="compNote">Only axes are visualized in the 3D scene.</div>
+        </div>
+        <div id="twinHint">drag to orbit · scroll to zoom</div>
+        <div id="twinMsg"></div>
+      </div>
       <div class="view-tabs">
         <button data-mode="2d" class="active">2D</button>
-        <button data-mode="3d" title="3D isometric view. Live X/Y/Z/B/C positions from the agent drive the geometry. Solid-model assets currently unavailable upstream; we render procedural geometry that follows the same axis mapping.">3D</button>
+        <button data-mode="3d" title="Interactive 3D twin of the assembled device. Drag to orbit, scroll to zoom. Driven by live data from demo.mtconnect.org when you press Play.">3D</button>
       </div>
       <div class="view-controls" id="viewControls">
         <button id="rotL" title="Rotate left">↺</button>
@@ -537,6 +577,7 @@
   <span style="margin-left:auto;color:var(--muted)">Backend: live CNC mill on <code>demo.mtconnect.org</code> · device file + SHDR exported on Stop</span>
 </footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ---------------------------------------------------------------
    Build Your Own Machine — single-file MTConnect playground demo
@@ -544,14 +585,14 @@
 
 /* ─────────────────────────────────────────────────────────────
    COMPONENTS — keyed bag of buildable pieces.
-   Every entry mirrors a real component on the Mazak 5-axis on
-   demo.mtconnect.org. Each DataItem carries `mazakId` — the actual
-   id used by the live agent — so Play can route real telemetry
-   straight into this piece's stream rows.
-   Probe: https://demo.mtconnect.org/probe?device=Mazak
+   Every entry mirrors a real component on the demo 5-axis mill hosted at
+   demo.mtconnect.org. Each DataItem carries `mazakId` — the actual id used
+   by the live agent's probe response — so Play can route real telemetry
+   straight into this piece's stream rows. (The field name is historical;
+   don't read into it — it just names the source agent's DataItem id.)
    ───────────────────────────────────────────────────────────── */
 const COMPONENTS = {
-  /* ───── Linear axes (Mazak: X, Y, Z) ───── */
+  /* ───── Linear axes (X, Y, Z) ───── */
   'linear-x': {
     kind: 'Linear', name: 'X', id: 'x', parentKind: 'Axes',
     dataItems: [
@@ -589,7 +630,7 @@ const COMPONENTS = {
     ]
   },
 
-  /* ───── Rotary axes (Mazak: B trunnion, C1 table, C2 spindle) ───── */
+  /* ───── Rotary axes (B trunnion, C1 table, C2 spindle) ───── */
   'rotary-b': {
     kind: 'Rotary', name: 'B', id: 'br', parentKind: 'Axes',
     dataItems: [
@@ -620,7 +661,7 @@ const COMPONENTS = {
     ]
   },
 
-  /* ───── Controller / Path (Mazak has a *very* dense path) ───── */
+  /* ───── Controller / Path (the demo mill has a *very* dense path) ───── */
   'controller': {
     kind: 'Controller', name: 'controller', id: 'cont',
     dataItems: [
@@ -649,7 +690,7 @@ const COMPONENTS = {
     }]
   },
 
-  /* ───── Systems (what the real Mazak's Systems wrapper contains) ───── */
+  /* ───── Systems (what the demo mill's Systems wrapper contains) ───── */
   'coolant': {
     kind: 'Coolant', name: 'coolant', id: 'coolant', parentKind: 'Systems',
     dataItems: [
@@ -736,7 +777,7 @@ const COMPONENTS = {
     ]
   },
 
-  /* ───── Device-level DataItems (what the real Mazak <Device> carries) ───── */
+  /* ───── Device-level DataItems (what a typical Device carries) ───── */
   'device-equipment-mode': {
     kind: 'DeviceLevel', name: 'equipment_modes', id: 'em', parentKind: 'Device',
     dataItems: [
@@ -749,8 +790,8 @@ const COMPONENTS = {
   }
 };
 
-// Total Mazak component slots, for tree-fullness reporting:
-const FULL_MAZAK_SLOTS = Object.keys(COMPONENTS).length;
+// Total component slots, for tree-fullness reporting:
+const FULL_DEVICE_SLOTS = Object.keys(COMPONENTS).length;
 
 // Persisted state: an ordered list of slots added.
 // Each slot is { key, instanceId } where key is a COMPONENTS key.
@@ -770,7 +811,7 @@ let activeTouchTreeLine = null;
 /* ---------- Add / remove ---------- */
 /* Keys allowed more than once. Each insertion gets a fresh slot id (and a
    schema-valid auto-name if the COMPONENTS entry declares autoName).        */
-const MULTI_INSTANCE = new Set([]);  // Mazak has fixed single-instance components
+const MULTI_INSTANCE = new Set([]);  // demo mill has fixed single-instance components
 
 /* Resolve a slot into a render-ready component definition.
    Applies two slot-level overrides:
@@ -841,25 +882,16 @@ function addComponent(key, presetCategories) {
   const present = Object.keys(buckets).filter(k => buckets[k].length > 0);
   const existingSlot = !MULTI_INSTANCE.has(key) ? machine.find(s => s.key === key) : null;
 
-  if (existingSlot) {
-    // Single-category components have nothing the user could change — flash.
-    if (present.length <= 1) {
-      flash(`Already added: ${def.kind} "${def.name}". Use [remove] in the tree to delete it.`);
-      return;
-    }
-    // Multi-category → open dialog in EDIT mode (pre-populated, lets user
-    // toggle categories on/off without deleting the component).
-    openCategoryDialog(key, buckets, existingSlot);
+  // Device is the required root — auto-add all its DataItems on click without
+  // a dialog (that's the "Step 1 · Create the Device" UX). Every OTHER chip
+  // opens the dialog so the user can opt into (or out of) each DataItem
+  // category, even single-category components. Re-clicking a placed chip
+  // opens the dialog in EDIT mode with current selections pre-checked.
+  if (key === 'device' && !existingSlot) {
+    commitAdd(key, new Set(present));
     return;
   }
-
-  if (present.length <= 1) {
-    // Single-category component → no choice to make, add immediately.
-    commitAdd(key, new Set(present));
-  } else {
-    // Multi-category → ask the user what they want.
-    openCategoryDialog(key, buckets, null);
-  }
+  openCategoryDialog(key, buckets, existingSlot);
 }
 
 function commitAdd(key, categories) {
@@ -1221,18 +1253,19 @@ function buildNodeTree() {
                  diType: di.type, diSubType: di.subType || null, diCat: di.category });
   });
 
-  // Extra Device-level slots (e.g. device-equipment-mode): render the slot as a
-  // virtual organizer node with its DataItems as children, so the user can
-  // collapse / remove the whole bundle as a unit.
+  // Extra Device-level slots (e.g. device-equipment-mode): render the slot's
+  // DataItems as flat children of Device, matching how they actually appear in
+  // the XML. No virtual organizer wrapper node. The slotId is attached to each
+  // DataItem line so clicking [remove] on any one deletes the whole bundle
+  // (since they were added together as one palette action).
   machine.filter(s => s.key !== 'device' && resolveSlot(s).parentKind === 'Device').forEach(s => {
-    const rs = resolveSlot(s);
-    const groupNid = 'comp:' + s.slotId;
-    out.push({ nid: groupNid, parentNid: 'dev', depth: 1, kind: 'organizer',
-               name: rs.name || rs.kind, compId: rs.id || ('slot' + s.slotId), slotId: s.slotId });
-    (rs.dataItems || []).forEach(di => {
-      out.push({ nid: 'di:' + di.id, parentNid: groupNid, depth: 2, kind: 'dataitem',
-                 name: toCamel(di.type) + (di.subType ? '.' + toCamel(di.subType) : ''), compId: di.id,
-                 diType: di.type, diSubType: di.subType || null, diCat: di.category });
+    (resolveSlot(s).dataItems || []).forEach(di => {
+      out.push({
+        nid: 'di:' + di.id, parentNid: 'dev', depth: 1, kind: 'dataitem',
+        name: toCamel(di.type) + (di.subType ? '.' + toCamel(di.subType) : ''),
+        compId: di.id, slotId: s.slotId,
+        diType: di.type, diSubType: di.subType || null, diCat: di.category
+      });
     });
   });
 
@@ -1393,14 +1426,446 @@ function rerenderTree() {
 
 /* ---------- Render: SVG illustration ---------- */
 /* ---------- View state shared by 2D and 3D renderers ---------- */
-let viewMode     = '2d';  // '3d' or '2d'
+let viewMode     = '2d';  // '2d' (SVG) or '3d' (Three.js twin, inline module below)
+
+/* ---------- 3D twin — inline Three.js scene ----------
+   The 3D view is a real WebGL scene built with Three.js (loaded above from CDN).
+   The module is scoped inside initTwin() so its ~40 local variables never
+   collide with playground names, and it exposes a small control surface on
+   window.__twin so playground code can drive it directly (no postMessage,
+   no iframe boundary). Lazily initialized on first 3D activation so no GPU
+   context is created if the user never opens the 3D view. */
+const KEY_TO_AXIS = { 'linear-x':'x', 'linear-y':'y', 'linear-z':'z',
+                      'rotary-b':'b', 'rotary-c1':'c1', 'rotary-c2':'c2' };
+function computeMillAxes() {
+  return machine.map(s => KEY_TO_AXIS[s.key]).filter(Boolean);
+}
+// Everything the user has placed that ISN'T a linear/rotary axis — used by the
+// 3D twin's bottom symbol strip so the developer can see which non-axis pieces
+// are in the assembly without those pieces having to live in the 3D scene.
+function computeNonAxisKeys() {
+  return machine.map(s => s.key).filter(k => !(k in KEY_TO_AXIS) && k !== 'device');
+}
+
+function initTwin() {
+  if (window.__twin) return;
+  if (typeof THREE === 'undefined') {
+    const msg = document.getElementById('twinMsg');
+    if (msg) { msg.textContent = 'Could not load three.js (offline?).'; msg.style.display = 'flex'; }
+    return;
+  }
+
+  const D2R = Math.PI / 180;
+  const CURRENT_URL = 'https://demo.mtconnect.org/Mazak/current';
+  const MILL_AXIS = {
+    x:  ['x_pos', 'Xpos', 'Xabs'],
+    y:  ['y_pos', 'Ypos', 'Yabs'],
+    z:  ['z_pos', 'Zpos', 'Zabs'],
+    b:  ['b_angle', 'Bpos', 'Babs'],
+    c1: ['c_angle', 'Cpos', 'Cabs'],
+    c2: ['Srpm']
+  };
+  const ROBOT_IDS = ['j1_angle', 'j2_angle', 'j3_angle', 'j4_angle', 'j5_angle', 'j6_angle'];
+  const pick = (c, cands) => { for (const id of cands) if (id in c) return c[id]; return undefined; };
+
+  const stage = document.getElementById('stage3D');
+  const readoutLabel = document.getElementById('twinRLabel');
+  const readoutVals  = document.getElementById('twinRVals');
+  const msgEl = document.getElementById('twinMsg');
+  const setMsg = (m) => { if (msgEl) { msgEl.textContent = m || ''; msgEl.style.display = m ? 'flex' : 'none'; } };
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, stage.clientWidth / stage.clientHeight, 0.1, 1000);
+
+  // 3-light setup: warm key from above-right, cool fill from left-front,
+  // subtle rim from behind. Hemisphere gives the ambient sky/ground gradient.
+  scene.add(new THREE.HemisphereLight(0xbfd6ff, 0x1a2438, 0.55));
+  const keyL  = new THREE.DirectionalLight(0xfff6e0, 1.05); keyL.position.set(6, 10, 4);   scene.add(keyL);
+  const fillL = new THREE.DirectionalLight(0xa0c8ff, 0.5);  fillL.position.set(-8, 6, -3); scene.add(fillL);
+  const rimL  = new THREE.DirectionalLight(0xffffff, 0.35); rimL.position.set(0, 3, -10);  scene.add(rimL);
+
+  scene.add(new THREE.GridHelper(20, 20, 0x2a3550, 0x1a2740));
+  scene.add(new THREE.AxesHelper(1.5));   // origin axes: red=X, green=Y, blue=Z (world orientation)
+
+  // Materials — PBR values tuned so painted cast, brushed steel, and dark
+  // machine sub-parts each read distinctly under the 3-light setup.
+  const matCast   = () => new THREE.MeshStandardMaterial({ color: 0x2c3244, roughness: 0.85, metalness: 0.15 });
+  const matSteel  = () => new THREE.MeshStandardMaterial({ color: 0xa8b5c8, roughness: 0.35, metalness: 0.75 });
+  const matDark   = () => new THREE.MeshStandardMaterial({ color: 0x39435c, roughness: 0.60, metalness: 0.40 });
+  const matAccent = () => new THREE.MeshStandardMaterial({ color: 0xff8a3d, roughness: 0.50, metalness: 0.20 });
+  const matTable  = () => new THREE.MeshStandardMaterial({ color: 0x1e2338, roughness: 0.70, metalness: 0.15 });
+  const matTool   = () => new THREE.MeshStandardMaterial({ color: 0x8fddff, roughness: 0.35, metalness: 0.60 });
+  const matPanel  = () => new THREE.MeshStandardMaterial({ color: 0x1a2033, roughness: 0.70, metalness: 0.10, transparent: true, opacity: 0.12, side: THREE.DoubleSide });
+  // Kept for the robot rig (legacy API — takes color + optional roughness/metalness)
+  const mat = (c, rough = 0.6, metal = 0.2) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: metal });
+  const C = { steel: 0x9fb0c9, dark: 0x39435c, accent: 0xff8a3d, table: 0x2b3350, tool: 0x5ad1ff };
+  const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); g.position.set(x, y, z); return g; };
+  const cyl = (rt, rb, h, m, x = 0, y = 0, z = 0) => { const g = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 24), m); g.position.set(x, y, z); return g; };
+
+  // 6-DOF robot rig (nested joint groups)
+  function buildRobot() {
+    const root = new THREE.Group();
+    root.add(cyl(0.85, 1.0, 0.35, mat(C.dark), 0, 0.175, 0));
+    const j1 = new THREE.Group(); j1.position.y = 0.35; root.add(j1);
+    j1.add(cyl(0.55, 0.6, 0.7, mat(C.steel), 0, 0.35, 0));
+    const j2 = new THREE.Group(); j2.position.y = 0.7; j1.add(j2);
+    j2.add(box(0.5, 1.9, 0.5, mat(C.accent), 0, 0.95, 0));
+    const j3 = new THREE.Group(); j3.position.y = 1.9; j2.add(j3);
+    j3.add(box(0.42, 1.5, 0.42, mat(C.steel), 0, 0.75, 0));
+    const j4 = new THREE.Group(); j4.position.y = 1.5; j3.add(j4);
+    j4.add(cyl(0.28, 0.28, 0.6, mat(C.dark), 0, 0.3, 0));
+    const j5 = new THREE.Group(); j5.position.y = 0.6; j4.add(j5);
+    j5.add(cyl(0.24, 0.24, 0.4, mat(C.steel), 0, 0.2, 0));
+    const j6 = new THREE.Group(); j6.position.y = 0.4; j5.add(j6);
+    j6.add(cyl(0.26, 0.26, 0.12, mat(C.dark), 0, 0.06, 0));
+    j6.add(box(0.12, 0.35, 0.12, mat(C.tool), 0, 0.28, 0));
+    const J = { j1_angle: [j1, 'y'], j2_angle: [j2, 'x'], j3_angle: [j3, 'x'], j4_angle: [j4, 'y'], j5_angle: [j5, 'x'], j6_angle: [j6, 'y'] };
+    root.userData.apply = (v) => { for (const id in J) { const [g, ax] = J[id]; g.rotation[ax] = (v[id] || 0) * D2R; } };
+    return root;
+  }
+
+  // Mill rig: enhanced procedural — cast base with ribs + mounting bosses,
+  // chamfered gantry columns, bellows way covers on X, detailed spindle with
+  // cooling fins + HSK taper, ATC turret, translucent enclosure back panel,
+  // ground shadow disc. Every sub-group is toggled on/off by setPresent() so
+  // the mill visibly builds up as the developer adds components.
+  function buildMill() {
+    const root = new THREE.Group();
+
+    // --- Base casting (always visible) --------------------------------------
+    const base = new THREE.Group(); root.add(base);
+    base.add(box(6.4, 0.5,  4.2, matCast(), 0, 0.25, 0));                  // main slab
+    base.add(box(5.6, 0.18, 3.8, matCast(), 0, 0.58, 0));                  // top flange
+    for (const x of [-2.0, -0.7, 0.7, 2.0])                                 // longitudinal ribs
+      base.add(box(0.15, 0.35, 4.1, matCast(), x, 0.35, 0));
+    for (const [x, z] of [[-3.0,-1.9],[3.0,-1.9],[-3.0,1.9],[3.0,1.9]])     // corner mounting bosses
+      base.add(cyl(0.35, 0.4, 0.16, matCast(), x, 0.08, z));
+
+    // --- Trunnion + rotary table (B tilt + C1 rotate) -----------------------
+    const trunnionB = new THREE.Group(); trunnionB.position.set(0, 0.67, 0); root.add(trunnionB);
+    const trunnionArms = new THREE.Group(); trunnionB.add(trunnionArms);
+    for (const s of [-1, 1]) {
+      trunnionArms.add(box(0.35, 0.55, 1.3, matSteel(), 1.35 * s, 0.3, 0));  // arm body
+      trunnionArms.add(cyl(0.28, 0.28, 0.45, matSteel(), 1.35 * s, 0.3, 0)); // pivot hub
+    }
+    const tableC1 = new THREE.Group(); trunnionB.add(tableC1);
+    tableC1.add(box(2.6, 0.25, 2.0, matTable(), 0, 0.3, 0));                 // worktable
+    for (const z of [-0.6, -0.2, 0.2, 0.6])                                   // T-slot lines (cosmetic)
+      tableC1.add(box(2.55, 0.03, 0.05, matDark(), 0, 0.43, z));
+    const c1disc = new THREE.Group(); tableC1.add(c1disc);
+    c1disc.add(cyl(0.85, 0.85, 0.13, matSteel(), 0, 0.48, 0));
+    c1disc.add(box(0.14, 0.16, 0.62, matAccent(), 0, 0.57, 0.28));            // rotation indicator
+
+    // --- Gantry columns + fixed crossbeam -----------------------------------
+    // Column height raised (+1.5) so the spindle sits high enough above the
+    // rotary table that live Z values from demo.mtconnect.org don't drive the
+    // tool through the worktable. The crossbeam is now part of the FIXED
+    // frame (in `columns`) so the X carriage visibly slides along it instead
+    // of the whole beam+carriage sliding together and disconnecting from the
+    // columns.
+    const columns = new THREE.Group(); root.add(columns);
+    for (const s of [-1, 1]) {
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.42, 4.7, 8), matDark());
+      col.position.set(2.7 * s, 2.6, 0); columns.add(col);                       // taller column
+      columns.add(box(0.55, 0.22, 4.4, matSteel(), 2.7 * s, 4.85, 0));           // top cap
+    }
+    // Fixed crossbeam (spans between column tops, stays put when X moves)
+    const beam = new THREE.Group(); columns.add(beam);
+    beam.add(box(6.0, 0.35, 0.55, matDark(), 0, 4.85, 0));
+
+    // --- X carriage (moves along X on the fixed beam) ----------------------
+    // Deeper Z extent (2.4 instead of 0.7) so the Y saddle has actual rail
+    // length to travel along without immediately hanging off the bar.
+    const xg = new THREE.Group(); root.add(xg);
+    xg.add(box(2.2, 0.5, 2.4, matAccent(), 0, 4.90, 0));                         // orange X-carriage
+    // X-axis bellows way cover (stack of alternating-width thin boxes)
+    const xBellows = new THREE.Group(); xg.add(xBellows);
+    for (let i = 0; i < 5; i++) {
+      const s = 1 - (i % 2) * 0.12;
+      xBellows.add(box(2.6 * s, 0.05, 2.4, matDark(), 0, 5.12 - i * 0.02, 0));
+    }
+
+    // --- Y saddle (front-back travel along the carriage's Z depth) ---------
+    // Saddle depth reduced (0.6) so it fits comfortably on the carriage even
+    // near travel extremes. Saddle top clears the orange bar top with a 0.03
+    // gap so faces are never co-planar (z-fighting fix).
+    const yg = new THREE.Group(); xg.add(yg);
+    const saddle = new THREE.Group(); yg.add(saddle);
+    saddle.add(box(0.95, 0.7,  0.6, matDark(),  0, 4.83, 0));                    // saddle body
+    saddle.add(box(0.8,  0.12, 0.5, matSteel(), 0, 5.25, 0));                    // steel top plate
+
+    // --- Z ram + spindle (vertical travel) ---------------------------------
+    // All y-positions raised by +1.5 (relative to the previous version) so
+    // the tool tip has ~1.5 units of headroom above the rotary table.
+    const zg = new THREE.Group(); yg.add(zg);
+    const spindle = new THREE.Group(); zg.add(spindle);
+    spindle.add(box(0.55, 1.1, 0.55, matDark(),  0, 4.35, 0));                   // Z ram (way box)
+    spindle.add(cyl(0.32, 0.32, 0.5,  matDark(), 0, 3.85, 0));                   // upper housing
+    for (let i = 0; i < 6; i++)                                                   // cooling fins
+      spindle.add(cyl(0.42, 0.42, 0.03, matSteel(), 0, 3.65 + i * 0.06, 0));
+    spindle.add(cyl(0.30, 0.30, 0.4,  matSteel(), 0, 3.35, 0));                  // spindle body
+    spindle.add(cyl(0.15, 0.22, 0.12, matSteel(), 0, 3.16, 0));                  // HSK taper interface
+    spindle.add(cyl(0.06, 0.06, 0.28, matTool(),  0, 2.95, 0));                  // tool shank
+    spindle.add(cyl(0.09, 0.02, 0.06, matTool(),  0, 2.78, 0));                  // tool tip
+    const c2blade = new THREE.Group(); zg.add(c2blade);
+    c2blade.add(box(0.72, 0.08, 0.12, matAccent(), 0, 3.5, 0));                  // spin-indicator vane
+
+    // --- Enclosure hint: translucent back panel (context, no visual block) --
+    const enclosure = new THREE.Group(); root.add(enclosure);
+    enclosure.add(box(6.4, 5.6, 0.04, matPanel(), 0, 2.8, -2.1));                // back panel (taller)
+
+    // --- Ground shadow disc (perceived-quality boost) -----------------------
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(6, 32),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })
+    );
+    shadow.rotation.x = -Math.PI / 2; shadow.position.y = -0.005; root.add(shadow);
+
+    // --- Motion logic (unchanged from prior version) -----------------------
+    const T = 2.6, SCALE = T / 600, home = {};
+    const disp = (id, v) => { if (home[id] === undefined) home[id] = v; return Math.max(-T, Math.min(T, (v - home[id]) * SCALE)); };
+    let spin = 0;
+    root.userData.apply = (cur) => {
+      const X = pick(cur, MILL_AXIS.x), Y = pick(cur, MILL_AXIS.y), Z = pick(cur, MILL_AXIS.z);
+      if (X !== undefined) xg.position.x = disp('x', X);
+      // Y travel scaled to keep the saddle on the (now-deeper) X carriage
+      // without hanging off at travel extremes.
+      if (Y !== undefined) yg.position.z = disp('y', Y) * 0.35;
+      // Z travel softened so live Z values from the demo agent don't drive
+      // the tool tip through the rotary table.
+      if (Z !== undefined) zg.position.y = -disp('z', Z) * 0.35;
+      const B = pick(cur, MILL_AXIS.b), C1 = pick(cur, MILL_AXIS.c1), RPM = pick(cur, MILL_AXIS.c2);
+      if (B !== undefined) trunnionB.rotation.x = Math.max(-1.2, Math.min(1.2, B * D2R * 0.3));
+      if (C1 !== undefined) tableC1.rotation.y = C1 * D2R;
+      if (present.c2 && RPM !== undefined) { spin += 0.12; spindle.rotation.y = spin; c2blade.rotation.y = spin; }
+    };
+    // Toggle visibility so the mill visually builds up as the user assembles it.
+    // Nothing shows until Device is placed. Then the base + shadow appear.
+    // Individual axis groups (columns/carriage, saddle, spindle, trunnion,
+    // table, spin indicator) light up as their corresponding chip is added.
+    root.userData.setPresent = (p) => {
+      const dev = !!p.deviceOn;
+      base.visible   = dev;
+      shadow.visible = dev;
+      if (!dev) {
+        xg.visible = columns.visible = beam.visible = false;
+        trunnionB.visible = enclosure.visible = false;
+        return;
+      }
+      const hasCarriage = !!(p.x || p.y || p.z);
+      // xg wraps the orange X-carriage + bellows + saddle + spindle; hiding
+      // the whole group ensures the orange box doesn't appear before any
+      // linear axis is placed.
+      xg.visible = hasCarriage;
+      columns.visible = beam.visible = hasCarriage;
+      xBellows.visible = hasCarriage;
+      saddle.visible = !!(p.y || p.z);
+      spindle.visible = !!p.z;
+      trunnionB.visible = !!p.b || !!p.c1;   // parent group holds arms + table
+      trunnionArms.visible = !!p.b;
+      c1disc.visible = !!p.c1;
+      c2blade.visible = !!p.c2;
+      enclosure.visible = hasCarriage || !!p.b || !!p.c1;
+    };
+    return root;
+  }
+
+  const robot = buildRobot(), mill = buildMill();
+  robot.visible = false; mill.visible = true; scene.add(robot); scene.add(mill);
+  let present = {}; mill.userData.setPresent(present);
+  let mode = 'mill';
+
+  // Orbit — camera framed for the taller mill (raised gantry).
+  let theta = 0.9, phi = 1.15, radius = 13;
+  const target = new THREE.Vector3(0, 2.6, 0);
+  function updateCam() {
+    camera.position.set(
+      target.x + radius * Math.sin(phi) * Math.sin(theta),
+      target.y + radius * Math.cos(phi),
+      target.z + radius * Math.sin(phi) * Math.cos(theta));
+    camera.lookAt(target);
+  }
+  let drag = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; });
+  window.addEventListener('pointerup', () => { drag = null; });
+  window.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    theta -= (e.clientX - drag.x) * 0.008;
+    phi = Math.max(0.25, Math.min(Math.PI - 0.15, phi - (e.clientY - drag.y) * 0.008));
+    drag = { x: e.clientX, y: e.clientY };
+  });
+  renderer.domElement.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    radius = Math.max(4, Math.min(30, radius * (1 + Math.sign(e.deltaY) * 0.08)));
+  }, { passive: false });
+
+  // Camera preset buttons — snap orbit to canonical views. Formulas match the
+  // updateCam() spherical-coord layout: theta=azimuth around Y, phi=polar from +Y.
+  const VIEWS = {
+    iso:   [0.9,       1.15,             13],
+    front: [0,         Math.PI / 2 - 0.05, 13],   // camera at +Z, looking at origin
+    side:  [Math.PI/2, Math.PI / 2 - 0.05, 13],   // camera at +X
+    top:   [0,         0.12,              13]     // near-top-down
+  };
+  document.querySelectorAll('#twinPresets button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#twinPresets button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const v = VIEWS[btn.dataset.view]; if (!v) return;
+      theta = v[0]; phi = v[1]; radius = v[2];
+    });
+  });
+  // Resize handling — recompute on window resize AND when playground re-lays out the stage
+  const resizeToStage = () => {
+    if (!stage.clientWidth || !stage.clientHeight) return;
+    renderer.setSize(stage.clientWidth, stage.clientHeight);
+    camera.aspect = stage.clientWidth / stage.clientHeight;
+    camera.updateProjectionMatrix();
+  };
+  window.addEventListener('resize', resizeToStage);
+
+  // Live data
+  const target_v = {}, cur = {};
+  let pollTimer = null;
+
+  async function poll() {
+    try {
+      const res = await fetch(CURRENT_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const doc = new DOMParser().parseFromString(await res.text(), 'application/xml');
+      if (doc.getElementsByTagName('parsererror').length) throw new Error('bad XML');
+      const ids = new Set();
+      Array.from(doc.getElementsByTagNameNS('*', '*')).forEach((el) => {
+        if (!el.hasAttribute('dataItemId')) return;
+        const id = el.getAttribute('dataItemId');
+        const v = parseFloat((el.textContent || '').trim());
+        ids.add(id);
+        if (!Number.isNaN(v)) target_v[id] = v;
+      });
+      setMsg('');
+    } catch (e) {
+      setMsg('Waiting for the MTConnect agent…');
+    }
+  }
+
+  function readout() {
+    const unit = { x: ' mm', y: ' mm', z: ' mm', b: '°', c1: '°', c2: ' rpm' };
+    let rows = [];
+    if (mode === 'robot') rows = ROBOT_IDS.map((id) => [id.replace('_angle', '').toUpperCase(), cur[id], '°']);
+    else if (mode === 'mill') rows = Object.keys(MILL_AXIS).map((ax) => [ax.toUpperCase(), pick(cur, MILL_AXIS[ax]), unit[ax]]);
+    readoutVals.innerHTML = rows
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v, u]) => `<div><span class="k">${k}</span> <span class="v">${v.toFixed(1)}${u}</span></div>`)
+      .join('') || `<div class="k">(no data)</div>`;
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    for (const id in target_v) cur[id] = (cur[id] === undefined) ? target_v[id] : cur[id] + (target_v[id] - cur[id]) * 0.15;
+    if (mode === 'robot') robot.userData.apply(cur);
+    else if (mode === 'mill') mill.userData.apply(cur);
+    updateCam();
+    renderer.render(scene, camera);
+    readout();
+  }
+  updateCam(); animate();
+
+  // Same SVG paths + accent colors the 2D palette uses. Keyed by COMPONENTS
+  // key so playground can pass the raw slot list and the twin renders matching
+  // symbols along the bottom bar. Only non-axis components appear here — axes
+  // are rendered in the 3D scene itself, so showing icons for them would be
+  // redundant.
+  const NON_AXIS_ICONS = {
+    'controller':             { color: '#5ad1ff', label: 'Controller',       path: '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 20h10M12 18v2"/>' },
+    'coolant':                { color: '#5ad1ff', label: 'Coolant',          path: '<path d="M12 3s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z"/>' },
+    'electric':               { color: '#facc15', label: 'Electric',         path: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>' },
+    'hydraulic':              { color: '#c0a6f0', label: 'Hydraulic',        path: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 9h6M9 13h6M9 17h6"/>' },
+    'pneumatic':              { color: '#8fddff', label: 'Pneumatic',        path: '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="14" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>' },
+    'lubrication':            { color: '#ffc46b', label: 'Lubrication',      path: '<circle cx="12" cy="14" r="6"/><path d="M12 4v4"/>' },
+    'door':                   { color: '#a0c8ff', label: 'Door',             path: '<rect x="6" y="3" width="12" height="18" rx="1"/><circle cx="15" cy="12" r="0.8" fill="currentColor"/>' },
+    'environmental':          { color: '#f87171', label: 'Environmental',    path: '<path d="M12 4c-4 6-6 9-6 12a6 6 0 0 0 12 0c0-3-2-6-6-12z"/>' },
+    'enclosure':              { color: '#8a97b1', label: 'Enclosure',        path: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 9h18"/>' },
+    'parts':                  { color: '#4ade80', label: 'Parts',            path: '<rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/>' },
+    'resources':              { color: '#c0a6f0', label: 'Resources',        path: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-1a6 6 0 0 1 12 0v1"/><circle cx="17" cy="11" r="2"/>' }
+    // Note: device-equipment-mode intentionally omitted — those are Device-level
+    // DataItems, not a distinct component. They already appear in the tree view
+    // directly under Device.
+  };
+
+  function renderNonAxisSymbols(keys) {
+    const holder = document.getElementById('twinCompIcons');
+    const bar = document.getElementById('twinComps');
+    const stage = document.getElementById('stageTwin');
+    if (!holder || !bar) return;
+    // Filter to just the non-axis keys the user has actually placed, in a stable order
+    const order = Object.keys(NON_AXIS_ICONS);
+    const shown = order.filter(k => keys.includes(k));
+    if (!shown.length) {
+      bar.style.display = 'none';
+      if (stage) stage.classList.remove('has-comps');
+      return;
+    }
+    holder.innerHTML = shown.map(k => {
+      const m = NON_AXIS_ICONS[k];
+      return `<span class="compIcon" title="${m.label}" style="color:${m.color};border-color:${m.color}44">` +
+             `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${m.path}</svg></span>`;
+    }).join('');
+    bar.style.display = '';
+    if (stage) stage.classList.add('has-comps');
+  }
+
+  // Control surface — playground drives these directly.
+  window.__twin = {
+    start()  { if (pollTimer) return; poll(); pollTimer = setInterval(poll, 250); },
+    stop()   { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } },
+    setDevice(axes, hasDeviceFlag) {
+      mode = 'mill'; robot.visible = false; mill.visible = true;
+      readoutLabel.textContent = 'MyCNC (mill)';
+      const p = {}; for (const k in MILL_AXIS) p[k] = axes.includes(k);
+      p.deviceOn = hasDeviceFlag !== false;   // default true if not passed
+      present = p; mill.userData.setPresent(p);
+    },
+    setNonAxes: renderNonAxisSymbols,
+    resize: resizeToStage
+  };
+}
+
+function setTwin3DMode(active) {
+  const twin = document.getElementById('stageTwin');
+  const svg  = document.getElementById('machineSvg');
+  const ctl  = document.getElementById('viewControls');
+  if (!twin || !svg) return;
+  if (active) {
+    // Reveal the twin container FIRST so its clientWidth/Height are non-zero
+    // when the WebGL renderer sizes itself.
+    twin.style.display = 'block';
+    svg.style.display  = 'none';
+    if (ctl) ctl.style.display = 'none';
+    initTwin();                         // lazy: builds the scene on first activation only
+    if (window.__twin) {
+      window.__twin.resize();            // stage size may have changed since last time
+      window.__twin.setDevice(computeMillAxes(), hasDevice());
+      window.__twin.setNonAxes(computeNonAxisKeys());
+      if (polling) window.__twin.start();
+    }
+  } else {
+    twin.style.display = 'none';
+    svg.style.display  = '';
+    if (window.__twin) window.__twin.stop();   // no need to keep hitting the agent when hidden
+  }
+}
 let viewRotation = -15;   // degrees, around vertical axis (3D only)
 let viewZoom     = 1;     // zoom (3D only)
 let selectedPart = null;  // id of selected component slot (string)
 
 /* ---------- Isometric 3D renderer ----------
    Reads live X/Y/Z/B/C positions from liveCache when Play is on, falls back
-   to procedural motion otherwise. The Mazak digital twin at
+   to procedural motion otherwise. The reference digital twin at
    demo.mtconnect.org/twin would load OBJ solid models for these
    sub-assemblies, but at time of writing the public upstream returns 503 on
    /twin/objs/* — so this renderer uses procedural geometry that follows the
@@ -1443,7 +1908,7 @@ function render3D() {
   const yMm = liveAxisValue('Yabs', 32 * Math.sin(t * 0.5));
   const zMm = liveAxisValue('Zabs', 30 + 30 * Math.sin(t * 0.9));
   const bDeg = liveAxisValue('Babs', 0);
-  // Mazak X range is roughly ±400mm; squash into the SVG's ±70 range
+  // Real X range is roughly ±400mm; squash into the SVG's ±70 range
   const xMap = Math.max(-70, Math.min(70, xMm * 0.18));
   const yMap = Math.max(-32, Math.min(32, yMm * 0.18));
   const zMap = Math.max(-30, Math.min(80, 30 + zMm * 0.18));
@@ -1581,7 +2046,7 @@ function render2D() {
       <text x="320" y="80" fill="#ffc46b" font-size="10" font-family="ui-monospace,monospace">Z</text>`);
   }
 
-  // Spindle (Rotary C2 — Mazak's spindle)
+  // Spindle (Rotary C2 — the demo mill's spindle)
   if (has('rotary-c2')) {
     const sr = slotOf('rotary-c2');
     out += wrap(sr.slotId, `
@@ -1662,18 +2127,16 @@ function rerenderSvg() {
   const wrap = $('#stageWrap');
   wrap.classList.toggle('has-parts', machine.length > 0);
 
+  // 3D mode is handled entirely by the inline twin module — the SVG isn't visible.
+  // Skip the whole SVG render path to avoid useless work every tick.
+  if (viewMode === '3d') return;
+
   const svg = $('#machineSvg');
-  // Switch viewBox + visibility of 3D-only controls based on mode
-  if (viewMode === '2d') {
-    svg.setAttribute('viewBox', '0 0 600 360');
-    $('#viewControls').style.display = 'none';
-  } else {
-    svg.setAttribute('viewBox', '-320 -220 640 440');
-    $('#viewControls').style.display = '';
-  }
+  svg.setAttribute('viewBox', '0 0 600 360');
+  $('#viewControls').style.display = 'none';
 
   if (machine.length === 0) { svg.innerHTML = ''; return; }
-  svg.innerHTML = (viewMode === '2d') ? render2D() : render3D();
+  svg.innerHTML = render2D();
 
   svg.querySelectorAll('[data-slot]').forEach(el => el.addEventListener('click', () => {
     const sid = Number(el.dataset.slot);
@@ -1793,11 +2256,14 @@ function buildXml() {
     (deviceDef.dataItems || []).forEach(di => {
       deviceInner += '        ' + renderDataItem(di, 0).replace(/^[ ]+/,'') + '\n';
     });
+    // Extra Device-level slots' DataItems render inline alongside Device's
+    // own, matching the tree view (no group wrapper). Each DataItem still
+    // gets its own xn span from renderDataItem, so hover-highlight works
+    // per-item via its di:<id> nid.
     devLevel.forEach(s => {
-      const slotNid = 'comp:' + s.slotId;
-      const inner = (resolveSlot(s).dataItems || [])
-        .map(di => '        ' + renderDataItem(di, 0).replace(/^[ ]+/,'')).join('\n');
-      deviceInner += wrap(slotNid, inner) + '\n';
+      (resolveSlot(s).dataItems || []).forEach(di => {
+        deviceInner += '        ' + renderDataItem(di, 0).replace(/^[ ]+/,'') + '\n';
+      });
     });
     deviceInner += `      <span class="tag">&lt;/DataItems&gt;</span>\n`;
   }
@@ -1896,7 +2362,7 @@ function rerenderStream() {
   const fullEl = $('#treeFullness');
   if (fullEl) {
     const placed = machine.length;
-    fullEl.textContent = `${placed} / ${FULL_MAZAK_SLOTS}` + (placed === FULL_MAZAK_SLOTS ? ' (complete!)' : '');
+    fullEl.textContent = `${placed} / ${FULL_DEVICE_SLOTS}` + (placed === FULL_DEVICE_SLOTS ? ' (complete!)' : '');
   }
 
   if (items.length === 0) {
@@ -2020,6 +2486,8 @@ function startPolling() {
   $('#btn-stop').style.display = '';
   $('#btn-stop-export').style.display = '';
   pollCurrent(pollGen);
+  // Twin is only initialized after the user opens the 3D tab. Start it if so.
+  if (window.__twin) window.__twin.start();
 }
 
 function stopPolling(exportFiles) {
@@ -2039,6 +2507,7 @@ function stopPolling(exportFiles) {
     setTimeout(downloadShdr, 250);  // separate user-gesture tick for the 2nd download
   }
   rerenderStream();
+  if (window.__twin) window.__twin.stop();
 }
 
 function downloadBlob(text, name, mime) {
@@ -2135,6 +2604,13 @@ function rerender() {
   rerenderStream();
   rerenderCode();
   updatePaletteState();
+  // Keep the 3D twin in sync with what the user has assembled — only mill
+  // parts that are actually placed appear in the twin scene, and only
+  // non-axis components placed appear in the twin's bottom symbol bar.
+  if (window.__twin) {
+    window.__twin.setDevice(computeMillAxes(), hasDevice());
+    window.__twin.setNonAxes(computeNonAxisKeys());
+  }
 }
 
 /* ---------- Tab switching ---------- */
@@ -2185,6 +2661,7 @@ document.querySelectorAll('.view-tabs button').forEach(btn => btn.addEventListen
   document.querySelectorAll('.view-tabs button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   viewMode = btn.dataset.mode;
+  setTwin3DMode(viewMode === '3d');
   rerenderSvg();
 }));
 
@@ -2225,14 +2702,13 @@ setMobilePane('palette'); // harmless no-op above the breakpoint; picks the star
 /* ---------- Boot ---------- */
 rerender();
 setInterval(() => {
+  // No autostart: neither view animates until the user hits Play. When Play
+  // is on, the sample loop is already pushing fresh values into liveCache
+  // and re-rendering the stream tab; this tick just keeps the SVG scene
+  // re-drawing between batches so procedural motion stays lively.
+  if (!polling || !machine.length) return;
   tick++;
-  if (machine.length) {
-    // While Play is on, the sample loop already pushes fresh values into the cache
-    // and re-renders the stream tab on each batch. The tick-based redraw here keeps
-    // the SVG animations (spindle spin, sliders) lively even between batches.
-    animateSvg();
-    if (!polling) rerenderStream();
-  }
+  animateSvg();
 }, 500);
 
 </script>
