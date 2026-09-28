@@ -2,7 +2,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Navbar from "./sections/Navbar";
 import Footer from "./sections/Footer";
 import ScrollToTop from "./components/ScrollToTop";
-import Home  from "./pages/Home";
+import WorkingGroups from "./pages/WorkingGroups";
+import Home from "./pages/Home";
 import About from "./pages/About";
 import Blogs from "./pages/Blogs";
 import BlogPost from "./pages/BlogPost";
@@ -24,8 +25,12 @@ function App() {
             <Route path="/blogs" element={<Blogs />} />
             <Route path="/blogs/:slug" element={<BlogPost />} />
             <Route path="/board-of-trustees" element={<BoardOfTrustees />} />
+            <Route path="/working-groups" element={<WorkingGroups />} />
             <Route path="/administration" element={<Administration />} />
-            <Route path="/standards-committee" element={<StandardsCommittee />} />
+            <Route
+              path="/standards-committee"
+              element={<StandardsCommittee />}
+            />
             <Route path="/r-d" element={<RnD />} />
           </Routes>
         </main>
