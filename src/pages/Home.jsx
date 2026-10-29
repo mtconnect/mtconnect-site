@@ -6,6 +6,7 @@ import WhyMTConnect  from "../sections/WhyMTConnect";
 import ExploreTools  from "../sections/ExploreTools";
 import VideoSection  from "../sections/VideoSection";
 import CTABanner     from "../sections/CTABanner";
+import HubSpotForm from "../sections/HubspotForm";
 
 const Home = () => (
   <>
@@ -16,6 +17,7 @@ const Home = () => (
     <WhyMTConnect />
     <ExploreTools />
     <VideoSection />
+    <HubSpotForm />
     <CTABanner />
   </>
 );

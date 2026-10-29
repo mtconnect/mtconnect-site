@@ -13,8 +13,7 @@ const StatsBar = () => (
               {stat.label}
             </p>
           </div>
-          {i < STATS.length - 1 && (
-            <div key={`div-${i}`} className="hidden md:block w-px h-11 bg-white/10" />
+          {i < STATS.length - 1 && (            <div key={`div-${i}`} className="hidden md:block w-px h-11 bg-white/10" />
           )}
         </>
       ))}
