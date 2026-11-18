@@ -1,17 +1,17 @@
 import { LINKS } from "./links";
 
 export const NAV_LINKS = [
-  { label: "Docs",      href: LINKS.docs        },
-  { label: "GitHub",    href: LINKS.github       },
-  { label: "Community", href: LINKS.slack        },
+  { label: "Docs", href: LINKS.docs },
+  { label: "GitHub", href: LINKS.github },
+  { label: "Community", href: LINKS.slack },
 ];
 
 export const STATS = [
-  { value: "250,000+", label: "Devices worldwide"    },
-  { value: "50+",      label: "Countries"            },
-  { value: "15+",      label: "Years of development" },
-  { value: "1,000+",   label: "Software solutions"   },
-  { value: "Free",     label: "Royalty-free & open", accent: true },
+  { value: "250,000+", label: "Devices worldwide" },
+  { value: "50+", label: "Countries" },
+  { value: "15+", label: "Years of development" },
+  { value: "1,000+", label: "Software solutions" },
+  { value: "Free", label: "Royalty-free & open", accent: true },
 ];
 
 export const WHY_CARDS = [
@@ -62,9 +62,17 @@ export const HOW_STEPS = [
 ];
 
 export const QS_STEPS = [
-  { num: "01", title: "Pull the agent",  cmd: "docker pull mtconnect/agent"              },
-  { num: "02", title: "Start it up",     cmd: "docker run -p 5000:5000 mtconnect/agent"  },
-  { num: "03", title: "Query live data", cmd: "curl http://localhost:5000/current"        },
+  { num: "01", title: "Pull the agent", cmd: "docker pull mtconnect/agent" },
+  {
+    num: "02",
+    title: "Start it up",
+    cmd: "docker run -p 5000:5000 mtconnect/agent",
+  },
+  {
+    num: "03",
+    title: "Query live data",
+    cmd: "curl http://localhost:5000/current",
+  },
 ];
 
 export const TOOL_CARDS = [
@@ -102,30 +110,33 @@ export const FOOTER_COLS = [
   {
     label: "Developers",
     links: [
-      { label: "Documentation", href: LINKS.docs        },
-      { label: "Quickstart",    href: LINKS.quickstart  },
-      { label: "API reference", href: LINKS.apiRef      },
-      { label: "GitHub ↗",     href: LINKS.github      },
+      { label: "Documentation", href: LINKS.docs },
+      { label: "Quickstart", href: LINKS.quickstart },
+      { label: "API reference", href: LINKS.apiRef },
+      {
+        label: "Companion Specifications",
+        href: LINKS.companionSpecs,
+      },
+      { label: "GitHub ↗", href: LINKS.github },
     ],
   },
   {
     label: "Tools",
     links: [
-      { label: "Model browser",     href: LINKS.modelBrowser },
-      { label: "MTCup",             href: LINKS.mtcup        },
-      { label: "Playground",        href: LINKS.playground   },
-      { label: "C++ agent",         href: LINKS.cppAgent     },
+      { label: "Model browser", href: LINKS.modelBrowser },
+      { label: "MTCup", href: LINKS.mtcup },
+      { label: "Playground", href: LINKS.playground },
+      { label: "C++ agent", href: LINKS.cppAgent },
     ],
   },
   {
     label: "Community",
     links: [
-      { label: "About Us",      href: "/about", internal: true },
-      { label: "Blog",          href: "/blogs", internal: true },
-      { label: "Slack",         href: LINKS.slack        },
-      { label: "MTCup forum",   href: LINKS.mtcup        },
-      { label: "Official site", href: LINKS.officialSite },
-      { label: "AMT",           href: LINKS.amt          },
+      { label: "About Us", href: "/about", internal: true },
+      { label: "Blog", href: "/blogs", internal: true },
+      { label: "Slack", href: LINKS.slack },
+      { label: "MTCup forum", href: LINKS.mtcup },
+      { label: "AMT", href: LINKS.amt },
     ],
   },
 ];

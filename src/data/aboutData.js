@@ -1,8 +1,7 @@
 export const ABOUT_INTRO = {
   eyebrow: "About Us",
   title: "The MTConnect Institute",
-  body:
-    "The MTConnect Institute is a 501(c)(6) not-for-profit standards development organization for the MTConnect standard (ANSI/MTC1.4-2018). Its membership is made up of over 400 companies and research organizations in discrete manufacturing including automotive, aerospace, medical, and other industries as well as software developers, system integrators, and research organizations supporting those industries. Membership is free and open to anyone with a stake in MTConnect.",
+  body: "The MTConnect Institute is a 501(c)(6) not-for-profit standards development organization for the MTConnect standard (ANSI/MTC1.4-2018). Its membership is made up of over 400 companies and research organizations in discrete manufacturing including automotive, aerospace, medical, and other industries as well as software developers, system integrators, and research organizations supporting those industries. Membership is free and open to anyone with a stake in MTConnect.",
 };
 
 export const ORG_GROUPS = [
@@ -43,7 +42,30 @@ export const ABOUT_FAQS = [
   },
   {
     q: "Where can I get it?",
-    a: "Current and archive releases of the standard are free and publicly available at mtconnect.org/documents. Free, open source developer tools are on GitHub at github.com/mtconnect.",
+    a: (
+      <>
+        Current and archive releases of the standard are free and publicly
+        available at{" "}
+        <a
+          href="https://www.mtconnect.org/documents"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "#007bff", textDecoration: "none" }}
+        >
+          mtconnect.org/documents
+        </a>
+        . Free, open-source developer tools are available on{" "}
+        <a
+          href="https://github.com/mtconnect"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "#007bff", textDecoration: "none" }}
+        >
+          GitHub
+        </a>
+        .
+      </>
+    ),
   },
   {
     q: "Do I need MTConnect if I'm already using another protocol (OPC, Profinet, Modbus, SCADA, etc.)?",

@@ -6,6 +6,7 @@ import WorkingGroups from "./pages/WorkingGroups";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Blogs from "./pages/Blogs";
+import CompanionSpecifications from "./pages/CompanionSpecifications";
 import BlogPost from "./pages/BlogPost";
 import BoardOfTrustees from "./pages/BoardOfTrustees";
 import Administration from "./pages/Administration";
@@ -22,6 +23,10 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/about" element={<About />} />
+            <Route
+              path="/companion-specifications"
+              element={<CompanionSpecifications />}
+            />
             <Route path="/blogs" element={<Blogs />} />
             <Route path="/blogs/:slug" element={<BlogPost />} />
             <Route path="/board-of-trustees" element={<BoardOfTrustees />} />
